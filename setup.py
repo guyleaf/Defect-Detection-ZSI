@@ -1,16 +1,15 @@
 #!/usr/bin/env python
 
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
+
 
 setup(
-    name='project',
-    version='0.0.0',
-    description='Describe Your Cool Project',
-    author='',
-    author_email='',
-    # REPLACE WITH YOUR OWN GITHUB PROJECT LINK
-    url='https://github.com/PyTorchLightning/pytorch-lightning-conference-seed',
-    install_requires=['pytorch-lightning'],
-    packages=find_packages(),
+    name="project",
+    version="0.0.0",
+    description="Defect Detection based on Zero-Shot Instance Segmentation",
+    author="leaf_ying,jeffchengtw,patrick0115",
+    author_email="leaf.ying.work@gmail.com",
+    url="https://github.com/guyleaf/Defect-Detection-ZSI",
+    install_requires=["pytorch-lightning~=1.7.4"],
+    packages=find_namespace_packages(),
 )
-
