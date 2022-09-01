@@ -1,5 +1,4 @@
 from pytorch_lightning import Trainer, seed_everything
-from project.lit_mnist import LitClassifier
 
 
 # def test_lit_classifier():
