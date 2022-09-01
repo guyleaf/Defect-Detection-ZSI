@@ -1,4 +1,7 @@
 pytorch-lightning ~= 1.7.4
 torch ~= 1.12.1
 torchvision ~= 0.13.0
+opencv-python ~= 4.6.0.66
+typed-argument-parser
+
 black
