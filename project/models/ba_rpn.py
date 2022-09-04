@@ -81,9 +81,6 @@ class BackgroundAwareRPNHead(nn.Module):
 
 
 class BackgroundAwareRPN(nn.Module):
-    head: nn.Module
-    anchor_generator: AnchorGenerator
-
     def __init__(
         self, head: nn.Module, anchor_generator: AnchorGenerator
     ) -> None:
