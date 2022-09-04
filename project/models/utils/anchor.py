@@ -77,6 +77,7 @@ class AnchorGenerator(nn.Module):
             for cell_anchor in self.cell_anchors
         ]
 
+    @property
     def num_anchors_per_location(self):
         return [
             len(s) * len(a) for s, a in zip(self.sizes, self.aspect_ratios)
@@ -134,10 +135,10 @@ class AnchorGenerator(nn.Module):
         return anchors
 
     def forward(
-        self, image_list: ImageList, feature_maps: list[torch.Tensor]
+        self, feature_maps: list[torch.Tensor], images: torch.Tensor
     ) -> list[torch.Tensor]:
         grid_sizes = [feature_map.shape[-2:] for feature_map in feature_maps]
-        image_size = image_list.tensors.shape[-2:]
+        image_size = images.shape[-2:]
         dtype, device = feature_maps[0].dtype, feature_maps[0].device
         strides = [
             [
@@ -152,14 +153,11 @@ class AnchorGenerator(nn.Module):
         ]
         self.set_cell_anchors(dtype, device)
         anchors_over_all_feature_maps = self.grid_anchors(grid_sizes, strides)
-        anchors: list[list[torch.Tensor]] = []
-        for _ in range(len(image_list.image_sizes)):
-            anchors_in_image = [
-                anchors_per_feature_map
-                for anchors_per_feature_map in anchors_over_all_feature_maps
-            ]
+
+        anchors: list[torch.Tensor] = []
+        for _ in range(images.size(0)):
+            anchors_in_image = torch.concat(
+                anchors_over_all_feature_maps, dim=0
+            )
             anchors.append(anchors_in_image)
-        anchors = [
-            torch.cat(anchors_per_image) for anchors_per_image in anchors
-        ]
         return anchors

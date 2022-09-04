@@ -4,8 +4,7 @@ import torch
 import torch.nn as nn
 from torchvision.ops import Conv2dNormActivation
 
-from ._utils import load_word_vectors, multi_apply
-from .anchor_utils import AnchorGenerator
+from .utils import AnchorGenerator, load_word_vectors, multi_apply
 
 
 class BackgroundAwareRPNHead(nn.Module):
@@ -91,6 +90,6 @@ class BackgroundAwareRPN(nn.Module):
         self.head = head
         self.anchor_generator = anchor_generator
 
-    def forward(self, feature_maps: list[torch.Tensor]):
+    def forward(self, feature_maps: list[torch.Tensor], images: torch.Tensor):
         cls_scores, bbox_preds, bg_vecs = multi_apply(self.head, feature_maps)
-        self.anchor_generator.grid_anchors()
+        anchors = self.anchor_generator(feature_maps, images)
