@@ -1,3 +1,4 @@
+from genericpath import isdir
 import os
 import glob
 import cv2
@@ -5,26 +6,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import copy
 import argparse
-
-
-class Option():
-    def __init__(self):
-        self.parser = argparse.ArgumentParser()
-    
-    def initialize(self):
-        self.parser.add_argument('--data_dir', type=str, default=os.path.join('dataset', 'keycap', 'train_seen'), help='dataset folder')
-        self.parser.add_argument('--output_dir', type=str, default=os.path.join('dataset', 'keycap', 'train_seen'), help='output folder')
-    
-    def parse(self):
-        self.initialize()
-        self.opt = self.parser.parse_args()
-        args = vars(self.opt)
-
-        print('------------ Options -------------')
-        for k, v in sorted(args.items()):
-            print('%s: %s' % (str(k), str(v)))
-        print('-------------- End ----------------')
-        return self.opt
+import json
 
 CLASS_MAP = {
     "black_scratch" : 0,
@@ -37,6 +19,44 @@ COLOR_MAP = {
     "1" : [0, 255, 0],
     "2" : [0, 0, 255]
 }
+
+
+
+class Option():
+    def __init__(self):
+        self.parser = argparse.ArgumentParser()
+    
+    def initialize(self):
+        self.parser.add_argument('--mode', type=str, default='train', help= 'train or test')
+        self.parser.add_argument('--data_dir', type=str, default=os.path.join('dataset', 'keycap'), help='dataset folder')
+        self.parser.add_argument('--output_dir', type=str, default=os.path.join('dataset', 'keycap'), help='output folder')
+        self.parser.add_argument('--debug', action='store_true', help='debug mode true or false')
+    
+    def parse(self):
+        self.initialize()
+        self.opt = self.parser.parse_args()
+        args = vars(self.opt)
+
+        folder = 'train_seen' if self.opt.mode is 'train' else 'test_unseen'
+        self.opt.data_dir = os.path.join(self.opt.data_dir, folder)
+        self.opt.output_dir = os.path.join(self.opt.output_dir, folder + '_json')
+
+        print('------------ Options -------------')
+        for k, v in sorted(args.items()):
+            print('%s: %s' % (str(k), str(v)))
+        print('-------------- End ----------------')
+        return self.opt
+
+class MyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return super(MyEncoder, self).default(obj)
 
 def get_image_dic(path, id):
     # extract file name
@@ -115,6 +135,8 @@ def main():
     images = list()
     annotations = list()
     categories = list()
+
+    ############################# make COCO #############################
     for id, file in enumerate(glob.glob(os.path.join(opt.data_dir, '*.bmp'))):
         images.append(get_image_dic(file, id))
         ann, cat = get_annotation_dic(file, id)
@@ -127,7 +149,23 @@ def main():
         "annotations" : annotations,
         "categories" : categories
     }
-    visualization(coco, opt)
+    ############################# make COCO #############################
+    
+    ############################# create json file #############################
+    if not os.path.isdir(opt.output_dir) : 
+        os.makedirs(opt.output_dir)
+    
+    string = json.dumps(coco, cls=MyEncoder)
+    with open(os.path.join(opt.output_dir, opt.mode + '.json'),'w')as f:
+        f.write(string)
+    
+    print('save json to ', os.path.join(opt.output_dir, opt.mode + '.json'))
+
+    ############################# create json file #############################
+    if opt.debug:
+        with open(os.path.join(opt.output_dir, opt.mode + '.json')) as f:
+            result=json.load(f)
+        visualization(coco, opt)
 
 
 
