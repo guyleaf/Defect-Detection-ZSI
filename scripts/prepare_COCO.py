@@ -29,7 +29,7 @@ class Option():
     def initialize(self):
         self.parser.add_argument('--mode', type=str, default='train', help= 'train or test')
         self.parser.add_argument('--data_dir', type=str, default=os.path.join('dataset', 'keycap'), help='dataset folder')
-        self.parser.add_argument('--output_dir', type=str, default=os.path.join('dataset', 'keycap'), help='output folder')
+        self.parser.add_argument('--output_dir', type=str, default='fk', help='output folder')
         self.parser.add_argument('--debug', action='store_true', help='debug mode true or false')
     
     def parse(self):
@@ -37,9 +37,8 @@ class Option():
         self.opt = self.parser.parse_args()
         args = vars(self.opt)
 
-        folder = 'train_seen' if self.opt.mode is 'train' else 'test_unseen'
-        self.opt.data_dir = os.path.join(self.opt.data_dir, folder)
-        self.opt.output_dir = os.path.join(self.opt.output_dir, folder + '_json')
+        self.opt.data_dir = os.path.join(self.opt.data_dir, self.opt.mode)
+        self.opt.output_dir = os.path.join(self.opt.output_dir, self.opt.mode + '_json')
 
         print('------------ Options -------------')
         for k, v in sorted(args.items()):
@@ -150,7 +149,7 @@ def main():
         "categories" : categories
     }
     ############################# make COCO #############################
-    
+
     ############################# create json file #############################
     if not os.path.isdir(opt.output_dir) : 
         os.makedirs(opt.output_dir)
