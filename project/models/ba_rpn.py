@@ -3,15 +3,18 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.ops import boxes as box_ops, Conv2dNormActivation
+import torchvision.ops.boxes as box_ops
+from torchvision.ops import Conv2dNormActivation
 
 from ..data import ImageAnnotation, ImageMetadata
 from .utils import (
     AnchorGenerator,
+    BoxCoder,
+    Matcher,
+    BalancedPositiveNegativeSampler,
     concat_box_prediction_layers,
     load_word_vectors,
     multi_apply,
-    BoxCoder,
 )
 
 
@@ -118,21 +121,35 @@ class BackgroundAwareRPN(nn.Module):
         head: nn.Module,
         anchor_generator: AnchorGenerator,
         # Faster-RCNN Training
-        fg_iou_thresh: float,
-        bg_iou_thresh: float,
-        batch_size_per_image: int,
-        positive_fraction: float,
-        train_pre_nms_top_n: int,
-        train_post_nms_top_n: int,
+        fg_iou_thresh: float = 0.7,
+        bg_iou_thresh: float = 0.3,
+        batch_size_per_image: int = 256,
+        positive_fraction: float = 0.5,
+        train_pre_nms_top_n: int = 2000,
+        train_post_nms_top_n: int = 2000,
         # Faster-RCNN Inference
-        test_pre_nms_top_n: int,
-        test_post_nms_top_n: int,
-        nms_thresh: float,
+        test_pre_nms_top_n: int = 1000,
+        test_post_nms_top_n: int = 1000,
+        nms_thresh: float = 0.7,
+        score_thresh: float = 0.0,
         min_size: float = 0.0,
     ) -> None:
         self.head = head
         self.anchor_generator = anchor_generator
         self.box_coder = BoxCoder(weights=(1.0, 1.0, 1.0, 1.0))
+
+        self.box_similarity = box_ops.box_iou
+
+        # TODO: implement min_pos_iou
+        # In original ZSI paper, they implement min_pos_iou to assign low quality matches to gt
+        # when positive samples can have smaller IoU than pos_iou_thr
+        self.proposal_matcher = Matcher(
+            fg_iou_thresh,
+            bg_iou_thresh,
+            allow_low_quality_matches=True,
+        )
+
+        self.fg_bg_sampler = BalancedPositiveNegativeSampler(batch_size_per_image, positive_fraction)
 
         self._train_pre_nms_top_n = train_pre_nms_top_n
         self._train_post_nms_top_n = train_post_nms_top_n
@@ -140,6 +157,7 @@ class BackgroundAwareRPN(nn.Module):
         self._test_post_nms_top_n = test_post_nms_top_n
 
         self._nms_thresh = nms_thresh
+        self._score_thresh = score_thresh
         self._min_size = min_size
 
     @property
@@ -157,7 +175,6 @@ class BackgroundAwareRPN(nn.Module):
     def assign_targets_to_anchors(
         self, anchors: list[torch.Tensor], targets: list[ImageAnnotation]
     ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
-
         labels = []
         matched_gt_boxes = []
         for anchors_per_image, targets_per_image in zip(anchors, targets):
@@ -181,26 +198,13 @@ class BackgroundAwareRPN(nn.Module):
                 matched_idxs = self.proposal_matcher(match_quality_matrix)
                 # get the targets corresponding GT for each proposal
                 # NB: need to clamp the indices because we can have a single
-                # GT in the image, and matched_idxs can be -2, which goes
+                # GT in the image, and matched_idxs can be -1, which goes
                 # out of bounds
                 matched_gt_boxes_per_image = gt_boxes[
                     matched_idxs.clamp(min=0)
                 ]
 
-                labels_per_image = matched_idxs >= 0
-                labels_per_image = labels_per_image.to(dtype=torch.float32)
-
-                # Background (negative examples)
-                bg_indices = (
-                    matched_idxs == self.proposal_matcher.BELOW_LOW_THRESHOLD
-                )
-                labels_per_image[bg_indices] = 0.0
-
-                # discard indices that are between thresholds
-                inds_to_discard = (
-                    matched_idxs == self.proposal_matcher.BETWEEN_THRESHOLDS
-                )
-                labels_per_image[inds_to_discard] = -1.0
+                labels_per_image = matched_idxs.to(dtype=torch.float32)
 
             labels.append(labels_per_image)
             matched_gt_boxes.append(matched_gt_boxes_per_image)
@@ -254,17 +258,17 @@ class BackgroundAwareRPN(nn.Module):
         for boxes, scores, lvl, image_meta in zip(
             proposals, objectness_prob, levels, image_metas
         ):
-            boxes = box_ops.clip_boxes_to_image(boxes, image_meta.shape)
+            boxes = box_ops.clip_boxes_to_image(boxes, image_meta.shape[1:])
 
             # remove small boxes
             keep = box_ops.remove_small_boxes(boxes, self._min_size)
             boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
 
             # Note: it is the default implementation of Faster R-CNN
-            # # remove low scoring boxes
-            # # use >= for Backwards compatibility
-            # keep = torch.where(scores >= self.score_thresh)[0]
-            # boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
+            # remove low scoring boxes
+            # use >= for Backwards compatibility
+            keep = torch.where(scores >= self._score_thresh)[0]
+            boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
 
             # non-maximum suppression, independently done per level
             keep = box_ops.batched_nms(boxes, scores, lvl, self._nms_thresh)
@@ -272,10 +276,10 @@ class BackgroundAwareRPN(nn.Module):
             # keep only topk scoring predictions
             keep = keep[: self.post_nms_top_n]
 
-            # FIXME: implement threshold filters when nms_across_levels = True/False
+            # TODO: implement threshold filters when nms_across_levels = True/False
             # current implementation is for nms_across_levels = True
-            keep = keep[: self._max_num]
-            boxes, scores = boxes[keep], scores[keep]
+            # keep = keep[: self._max_num]
+            # boxes, scores = boxes[keep], scores[keep]
 
             final_boxes.append(boxes)
             final_scores.append(scores)
@@ -305,8 +309,6 @@ class BackgroundAwareRPN(nn.Module):
 
         sampled_inds = torch.cat([sampled_pos_inds, sampled_neg_inds], dim=0)
 
-        cls_scores = cls_scores.flatten()
-
         labels = torch.cat(labels, dim=0)
         regression_targets = torch.cat(regression_targets, dim=0)
 
@@ -317,7 +319,7 @@ class BackgroundAwareRPN(nn.Module):
             reduction="sum",
         ) / (sampled_inds.numel())
 
-        objectness_loss = F.binary_cross_entropy_with_logits(
+        objectness_loss = F.cross_entropy(
             cls_scores[sampled_inds], labels[sampled_inds]
         )
 
@@ -373,12 +375,11 @@ class BackgroundAwareRPN(nn.Module):
             regression_targets = self.box_coder.encode(
                 matched_gt_boxes, anchors
             )
-            loss_cls, loss_rpn_bbox = self.compute_loss(
+            loss_cls, loss_bbox = self.compute_loss(
                 cls_scores, bbox_preds, labels, regression_targets
             )
             losses = {
                 "loss_rpn_cls": loss_cls,
-                "loss_rpn_bbox": loss_rpn_bbox,
+                "loss_rpn_bbox": loss_bbox,
             }
-
         return boxes, bg_vecs, losses

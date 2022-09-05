@@ -34,3 +34,6 @@ pip install -r requirements.txt
 ### Dataset Keycap
 Train image num : 218 <br>
 Test image num : 46 <br>
+
+### Input format
+labels: 0, -1, >= 1
