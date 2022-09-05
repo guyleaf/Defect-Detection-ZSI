@@ -5,6 +5,8 @@ import numpy as np
 import torch
 
 from .anchor import AnchorGenerator
+from .bbox import BoxCoder
+from .rpn import concat_box_prediction_layers
 
 
 def load_word_vectors(
@@ -37,4 +39,10 @@ def multi_apply(func, *args, **kwargs):
     return tuple(map(list, zip(*map_results)))
 
 
-__all__ = ["AnchorGenerator", "load_word_vectors", "multi_apply"]
+__all__ = [
+    "AnchorGenerator",
+    "load_word_vectors",
+    "multi_apply",
+    "concat_box_prediction_layers",
+    "BoxCoder",
+]

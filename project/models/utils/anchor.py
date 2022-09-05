@@ -100,8 +100,8 @@ class AnchorGenerator(nn.Module):
             shift_y, shift_x = torch.meshgrid(
                 shifts_y, shifts_x, indexing="ij"
             )
-            shift_x = shift_x.reshape(-1)
-            shift_y = shift_y.reshape(-1)
+            shift_x = shift_x.flatten()
+            shift_y = shift_y.flatten()
             shifts = torch.stack((shift_x, shift_y, shift_x, shift_y), dim=1)
 
             # For every (base anchor, output anchor) pair,
@@ -118,18 +118,18 @@ class AnchorGenerator(nn.Module):
         self, feature_maps: list[torch.Tensor], images: torch.Tensor
     ) -> list[torch.Tensor]:
         grid_sizes = [feature_map.shape[-2:] for feature_map in feature_maps]
-        image_size = images.shape[-2:]
+        image_height, image_width = images.shape[-2:]
         device = feature_maps[0].device
         strides = [
             [
                 torch.empty((), dtype=torch.int64, device=device).fill_(
-                    image_size[0] // g[0]
+                    image_height // grid_height
                 ),
                 torch.empty((), dtype=torch.int64, device=device).fill_(
-                    image_size[1] // g[1]
+                    image_width // grid_width
                 ),
             ]
-            for g in grid_sizes
+            for grid_height, grid_width in grid_sizes
         ]
 
         anchors_over_all_feature_maps = self._grid_anchors(

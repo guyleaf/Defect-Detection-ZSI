@@ -122,7 +122,6 @@ venv.bak/
 .idea
 .vscode
 
-# seed project
-lightning_logs/
-MNIST
+# project
 .DS_Store
+!/project/data/
