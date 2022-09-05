@@ -65,3 +65,4 @@ if opt.debug:
         result=json.load(f)
     visualization(coco, opt)
 ```
+![alt text](https://github.com/guyleaf/Defect-Detection-ZSI/blob/master/scripts/example.png)
