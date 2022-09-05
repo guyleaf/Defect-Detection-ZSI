@@ -34,3 +34,34 @@ pip install -r requirements.txt
 ### Dataset Keycap
 Train image num : 218 <br>
 Test image num : 46 <br>
+
+#### Option
+```
+self.parser.add_argument('--mode', type=str, default='train', help= 'train or test')
+self.parser.add_argument('--data_dir', type=str, default=os.path.join('dataset', 'keycap'), help='dataset folder')
+self.parser.add_argument('--output_dir', type=str, default='fk', help='output folder')
+self.parser.add_argument('--debug', action='store_true', help='debug mode true or false')
+```
+#### Run
+```
+python prepare_COCO.py --mode train --ouput_dir fk 
+```
+#### Result
+```
+------------ Options -------------
+data_dir: dataset\keycap\train_seen
+debug: False
+mode: train
+output_dir: fk\train_seen_json
+-------------- End ----------------
+save json to  fk\train_seen_json\train.json
+```
+#### Load *.json and visualization of each image
+```
+self.parser.add_argument('--debug', action='store_true', help='debug mode true or false')
+
+if opt.debug:
+    with open(os.path.join(opt.output_dir, opt.mode + '.json')) as f:
+        result=json.load(f)
+    visualization(coco, opt)
+```
