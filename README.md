@@ -30,3 +30,7 @@ cd Defect-Detection-ZSI
 pip install -e .
 pip install -r requirements.txt
 ```
+## Dataset Implementation
+### Dataset Keycap
+Train image num : 218 <br>
+Test image num : 46 <br>
