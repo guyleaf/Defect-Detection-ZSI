@@ -141,7 +141,7 @@ class BackgroundAwareRPN(nn.Module):
         self.box_similarity = box_ops.box_iou
 
         # TODO: implement min_pos_iou
-        # In original ZSI paper, they implement min_pos_iou to assign low quality matches to gt
+        # In ZSI paper, they implement min_pos_iou to assign low quality matches to gt
         # when positive samples can have smaller IoU than pos_iou_thr
         self.proposal_matcher = Matcher(
             fg_iou_thresh,
