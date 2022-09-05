@@ -120,7 +120,6 @@ venv.bak/
 
 # IDEs
 .idea
-.vscode
 
 # project
 .DS_Store
