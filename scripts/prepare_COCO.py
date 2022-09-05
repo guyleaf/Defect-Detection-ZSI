@@ -4,10 +4,27 @@ import cv2
 from matplotlib import pyplot as plt
 import numpy as np
 import copy
+import argparse
 
 
-DATASET = 'keycap'
-data_dir = os.path.join('dataset', DATASET, 'train_seen')
+class Option():
+    def __init__(self):
+        self.parser = argparse.ArgumentParser()
+    
+    def initialize(self):
+        self.parser.add_argument('--data_dir', type=str, default=os.path.join('dataset', 'keycap', 'train_seen'), help='dataset folder')
+        self.parser.add_argument('--output_dir', type=str, default=os.path.join('dataset', 'keycap', 'train_seen'), help='output folder')
+    
+    def parse(self):
+        self.initialize()
+        self.opt = self.parser.parse_args()
+        args = vars(self.opt)
+
+        print('------------ Options -------------')
+        for k, v in sorted(args.items()):
+            print('%s: %s' % (str(k), str(v)))
+        print('-------------- End ----------------')
+        return self.opt
 
 CLASS_MAP = {
     "black_scratch" : 0,
@@ -74,12 +91,12 @@ def get_annotation_dic(path, id):
 
     return ann_list, cate_list
 
-def visualization(coco):
+def visualization(coco, opt):
     images = coco['images']
     annotations = coco['annotations']
 
     for image, annotation in zip(images, annotations):
-        img = cv2.imread(os.path.join(data_dir, image['file_name']), cv2.IMREAD_COLOR)
+        img = cv2.imread(os.path.join(opt.data_dir, image['file_name']), cv2.IMREAD_COLOR)
         for object in annotation:
             x, y, w, h = object['bbox']
             contours = object['segmenation']
@@ -94,10 +111,11 @@ def visualization(coco):
 
 
 def main():
+    opt = Option().parse()
     images = list()
     annotations = list()
     categories = list()
-    for id, file in enumerate(glob.glob(os.path.join(data_dir, '*.bmp'))):
+    for id, file in enumerate(glob.glob(os.path.join(opt.data_dir, '*.bmp'))):
         images.append(get_image_dic(file, id))
         ann, cat = get_annotation_dic(file, id)
         annotations.append(ann)
@@ -109,7 +127,7 @@ def main():
         "annotations" : annotations,
         "categories" : categories
     }
-    visualization(coco)
+    visualization(coco, opt)
 
 
 
