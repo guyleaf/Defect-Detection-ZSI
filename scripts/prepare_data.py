@@ -124,13 +124,13 @@ def get_bbox(mask, image_id, start_ann_id):
                 contour[:, :, 1] += y1
 
             if len(contours) == 0:
-                print("segmenation is empty. discarded")
+                print("segmentation is empty. discarded")
                 continue
 
             ann_list.append(
                 {
                     "iscrowd": 0,
-                    "segmenation": [contour.flatten() for contour in contours],
+                    "segmentation": [contour.flatten() for contour in contours],
                     "area": area,
                     "bbox": bbox,  # (x, y, w, h)
                     "category_id": gray_scale + 1,
@@ -170,7 +170,7 @@ def visualization(coco, opt):
             x, y, w, h = object["bbox"]
             contours = [
                 np.stack(np.split(contour, len(contour) // 2))
-                for contour in object["segmenation"]
+                for contour in object["segmentation"]
             ]
             category_id = object["category_id"]
             class_name = SEEN_CLASSES[category_id - 1]
@@ -201,7 +201,7 @@ def main():
     start_ann_id = 0
     for id, file in enumerate(glob.glob(os.path.join(opt.data_dir, "*.bmp"))):
         images.append(get_image_dic(file, id))
-        annotations.append(get_annotation_dic(file, id, start_ann_id))
+        annotations.extend(get_annotation_dic(file, id, start_ann_id))
         start_ann_id += len(annotations[-1])
 
     coco = {
