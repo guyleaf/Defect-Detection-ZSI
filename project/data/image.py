@@ -8,20 +8,20 @@ class ImageMetadata:
 
     Args:
         name (str): the name of image
-        shape (tuple[int, int, int]): the shape of image (C, H, W)
+        size (tuple[int, int]): the size of image (H, W)
     """
 
-    def __init__(self, name: str, shape: tuple[int, int, int]) -> None:
+    def __init__(self, name: str, size: tuple[int, int]) -> None:
         self._name = name
-        self._shape = shape
+        self._size = size
 
     @property
     def name(self) -> str:
         return self._name
 
     @property
-    def shape(self) -> tuple[int, int, int]:
-        return self._shape
+    def size(self) -> tuple[int, int]:
+        return self._size
 
 
 class ImageAnnotation:
@@ -35,7 +35,7 @@ class ImageAnnotation:
     """
 
     def __init__(
-        self, bboxes: torch.Tensor, labels: torch.Tensor, masks: torch.Tensor
+        self, bboxes: torch.Tensor, labels: torch.Tensor, masks: list[torch.Tensor]
     ) -> None:
         self._bboxes = bboxes
         self._labels = labels
@@ -50,7 +50,7 @@ class ImageAnnotation:
         return self.labels
 
     @property
-    def masks(self) -> torch.Tensor:
+    def masks(self) -> list[torch.Tensor]:
         return self._masks
 
     def to(self, device: Union[str, torch.device]) -> None:

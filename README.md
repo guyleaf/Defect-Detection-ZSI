@@ -73,7 +73,7 @@ img_dic = {
 ann_list = [ann_dic0, ann_dic1, ann_dic2, ...]
 # ann_dic
 ann_dic = {
-    "segmenation" : [contours] , #from opencv
+    "segmentation" : [contours] , #from opencv
     "area" : int ,
     "bbox" : roi , # (x, y, w, h) # from opencv
     "category_id" : int,

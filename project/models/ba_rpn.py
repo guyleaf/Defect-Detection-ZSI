@@ -258,7 +258,7 @@ class BackgroundAwareRPN(nn.Module):
         for boxes, scores, lvl, image_meta in zip(
             proposals, objectness_prob, levels, image_metas
         ):
-            boxes = box_ops.clip_boxes_to_image(boxes, image_meta.shape[1:])
+            boxes = box_ops.clip_boxes_to_image(boxes, image_meta.size)
 
             # remove small boxes
             keep = box_ops.remove_small_boxes(boxes, self._min_size)
