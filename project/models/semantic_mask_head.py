@@ -1,4 +1,5 @@
-﻿import torch
+﻿from doctest import testfile
+import torch
 import torch.nn as nn
 from torch.nn.modules.utils import _pair
 import  numpy as np
@@ -13,9 +14,9 @@ class SemanticMaskHead(nn.Module):
     def __init__(self, 
         num_convs=4,
         roi_feat_size=14,
-        in_channels=256,
+        in_channels=2048,
         conv_kernel_size=3,
-        conv_out_channels=256,
+        conv_out_channels=2048,
         upsample_method='deconv',
         upsample_ratio=2,
         num_classes=4, # modify from 81 -> 4
@@ -226,5 +227,8 @@ class SemanticMaskHead(nn.Module):
                     param.requires_grad = False
 
 if __name__ == '__main__':
-    test = SemanticMaskHead()
+    SMH = SemanticMaskHead().cuda()
+    x = torch.randn(1, 2048, 14, 14).cuda()
+    y = SMH(x)
+    
     x=0
