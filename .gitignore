@@ -32,6 +32,7 @@ tests/tests_tt_dir/
 tests/save_dir
 default/   
 data/
+datasets/
 test_tube_logs/
 test_tube_data/
 model_weights/
@@ -124,3 +125,4 @@ venv.bak/
 # project
 .DS_Store
 !/project/data/
+!/project/datasets/
