@@ -8,6 +8,11 @@ from .anchor import AnchorGenerator
 from .bbox import BoxCoder, Matcher
 from .rpn import concat_box_prediction_layers
 
+from .conv_module import ConvModule, build_conv_layer
+from .conv_ws import ConvWS2d, conv_ws_2d
+from .norm import build_norm_layer
+
+
 
 def load_word_vectors(
     path: str, delimiter: str = ",", as_torch: bool = False
@@ -119,5 +124,16 @@ __all__ = [
     "concat_box_prediction_layers",
     "BoxCoder",
     "Matcher",
-    "BalancedPositiveNegativeSampler"
+    "BalancedPositiveNegativeSampler",
+    'conv_ws_2d', 
+    'ConvWS2d', 
+    'build_conv_layer', 
+    'ConvModule',
+    'build_norm_layer', 
+    'xavier_init', 
+    'normal_init', 
+    'uniform_init',
+    'kaiming_init', 
+    'bias_init_with_prob', 
+    'Scale'
 ]
