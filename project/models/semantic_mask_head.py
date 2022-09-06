@@ -1,6 +1,6 @@
 ﻿import torch
 import torch.nn as nn
-from ..utils import ConvModule
+from .utils import ConvModule
 
 class SemanticMaskHead(nn.Module):
     def __init__(self):
