@@ -2,7 +2,12 @@
 import torch.nn as nn
 from torch.nn.modules.utils import _pair
 import  numpy as np
-from .utils import ConvModule
+
+from utils import ConvModule
+
+
+print(torch.__version__)
+print(torch.cuda.is_available())
 
 class SemanticMaskHead(nn.Module):
     def __init__(self, 
@@ -20,7 +25,7 @@ class SemanticMaskHead(nn.Module):
         share_semantic=False,
         sync_bg=True, # reference from zero-shot-mask-rcnn-BARPN-bbox_mask_sync_bg_65_15_decoder_notanh.py
         voc_path=None,
-        vec_path='data/coco/word_w2v_withbg_65_15.txt', # reference from zero-shot-mask-rcnn-BARPN-bbox_mask_sync_bg_65_15_decoder_notanh.py
+        vec_path='../data/word_w2v_withbg_65_15.txt', # reference from zero-shot-mask-rcnn-BARPN-bbox_mask_sync_bg_65_15_decoder_notanh.py
         with_learnable_kernel=True,
         with_decoder=True, # reference from zero-shot-mask-rcnn-BARPN-bbox_mask_sync_bg_65_15_decoder_notanh.py
         class_agnostic=False,
@@ -29,7 +34,7 @@ class SemanticMaskHead(nn.Module):
         # loss_mask=dict(type='CrossEntropyLoss', use_mask=True, loss_weight=1.0),
         # loss_ed=dict(type='MSELoss', loss_weight=0.5)
     ):
-        super(SemanticMaskHead).__init__()
+        super(SemanticMaskHead, self).__init__()
         self.seen_class = seen_class
         self.gzsd = gzsd
         self.share_semantic = share_semantic
