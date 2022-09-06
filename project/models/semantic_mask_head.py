@@ -232,7 +232,6 @@ class SemanticMaskHead(nn.Module):
 if __name__ == '__main__':
     SMH = SemanticMaskHead().cuda()
     x = torch.randn(1, 2048, 14, 14).cuda()
-    vb = torch.randn(1, 300, 1, 1)
-    y = SMH(x, vb)
+    y = SMH(x)
     
     x=0
