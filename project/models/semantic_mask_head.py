@@ -1,5 +1,6 @@
 ﻿import torch
 import torch.nn as nn
+import  numpy as np
 from .utils import ConvModule
 
 class SemanticMaskHead(nn.Module):
@@ -8,12 +9,11 @@ class SemanticMaskHead(nn.Module):
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
 
+        # conv for upsampling
         self.convs = nn.ModuleList()
         for i in range(self.num_convs):
             in_channels = (self.in_channels if i == 0 else self.conv_out_channels)
             padding = (self.conv_kernel_size - 1) // 2
-            
-            # conv for upsampling
             self.convs.append(
                 ConvModule(
                     in_channels,
@@ -22,8 +22,53 @@ class SemanticMaskHead(nn.Module):
                     padding=padding,
                     conv_cfg=conv_cfg,
                     norm_cfg=norm_cfg
-                    )
                 )
+            )
+        # convT for encoder
+        self.convT = ConvModule(
+                in_channels,
+                300,
+                3,
+                padding=1,
+                conv_cfg=conv_cfg,
+                norm_cfg=norm_cfg
+            )
+        # dconvT for decoder
+        if self.with_decoder:
+            self.dconvT = ConvModule(
+                        300,
+                        in_channels,
+                        3,
+                        padding=1,
+                        conv_cfg=conv_cfg,
+                        norm_cfg=norm_cfg
+                    )
+
+        upsample_in_channels = (self.conv_out_channels if self.num_convs > 0 else in_channels)
+
+        if self.upsample_method is None:
+            self.upsample = None
+
+        elif self.upsample_method == 'deconv':
+            self.upsample = nn.ConvTranspose2d(
+                    upsample_in_channels,
+                    self.conv_out_channels,
+                    self.upsample_ratio,
+                    stride=self.upsample_ratio
+                )
+        else:
+            self.upsample = nn.Upsample(scale_factor=self.upsample_ratio, mode=self.upsample_method)
+
+        # relu
+        self.relu = nn.ReLU(inplace=True)
+
+        # word related
+        if voc_path is not None:
+            voc = np.loadtxt(voc_path, dtype='float32', delimiter=',')
+        else:
+            voc = None
+
+        vec_load = np.loadtxt(vec_path, dtype='float32', delimiter=',')
     
     def forward(self, x, bg_vector=None):
         # replace bg by ba-rpn
