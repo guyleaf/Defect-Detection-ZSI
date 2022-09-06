@@ -43,7 +43,7 @@ self.parser.add_argument('--debug', action='store_true', help='debug mode true o
 ```
 #### Run
 ```bash
-python prepare_COCO.py --mode train --ouput_dir fk 
+python prepare_data.py --mode train --ouput_dir fk 
 ```
 #### Result
 ```bash
