@@ -26,8 +26,8 @@ class SemanticMaskHead(nn.Module):
         class_agnostic=False,
         conv_cfg=None,
         norm_cfg=None,
-        loss_mask=dict(type='CrossEntropyLoss', use_mask=True, loss_weight=1.0),
-        loss_ed=dict(type='MSELoss', loss_weight=0.5)
+        # loss_mask=dict(type='CrossEntropyLoss', use_mask=True, loss_weight=1.0),
+        # loss_ed=dict(type='MSELoss', loss_weight=0.5)
     ):
         super(SemanticMaskHead).__init__()
         self.seen_class = seen_class
@@ -48,8 +48,8 @@ class SemanticMaskHead(nn.Module):
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         self.fp16_enabled = False
-        self.loss_mask = build_loss(loss_mask)
-        self.loss_ed = build_loss(loss_ed)
+        # self.loss_mask = build_loss(loss_mask)
+        # self.loss_ed = build_loss(loss_ed)
         self.sync_bg=sync_bg
         
 
@@ -131,6 +131,24 @@ class SemanticMaskHead(nn.Module):
             self.con_vec_t.weight.data = torch.unsqueeze(torch.unsqueeze(self.vec, -1), -1)
             self.conv_vec_unseen = nn.Conv2d(300, vec_unseen.shape[1], 1, bias=False)
             self.conv_vec_unseen.weight.data = torch.unsqueeze(torch.unsqueeze(self.vec_unseen.t(), -1), -1)
+        
+        if voc is not None:
+            self.voc = voc.cuda()  # 300*66
+            self.conv_voc = nn.Conv2d(300, self.voc.size(1), 1, bias=False)
+            self.conv_voc.weight.data = torch.unsqueeze(torch.unsqueeze(self.voc.t(), -1), -1)
+        else:
+            self.voc = None
+
+        self.vec_unseen = vec_unseen.cuda()
+        if self.with_learnable_kernel:
+            if self.voc is not None:
+                self.kernel_semantic = nn.Conv2d(self.voc.size(1), 300, kernel_size=3, padding=1)
+                if self.with_decoder:
+                    self.d_kernel_semantic = nn.Conv2d(300, self.voc.size(1), kernel_size=3, padding=1)
+            else:
+                self.kernel_semantic = nn.Conv2d(300, 300, kernel_size=3, padding=1)
+                if self.with_decoder:
+                    self.d_kernel_semantic = nn.Conv2d(300, 300, kernel_size=3, padding=1)
 
 
     def forward(self, x, bg_vector=None):
@@ -181,4 +199,27 @@ class SemanticMaskHead(nn.Module):
         # TODO compute BCE loss
     
     def init_weights(self):
-        pass
+        for m in [self.upsample]:
+            if m is None:
+                continue
+            nn.init.kaiming_normal_(
+                m.weight, mode='fan_out', nonlinearity='relu')
+            nn.init.constant_(m.bias, 0)
+        if self.with_learnable_kernel:
+            for m in [self.kernel_semantic]:
+                if m is None:
+                    continue
+                nn.init.kaiming_normal_(
+                    m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.constant_(m.bias, 0)
+        for m in [self.conv_vec]:
+            for param in m.parameters():
+                param.requires_grad = False
+        if self.voc is not None:
+            for m in [self.conv_voc]:
+                for param in m.parameters():
+                    param.requires_grad = False
+
+if __name__ == '__main__':
+    test = SemanticMaskHead()
+    x=0
