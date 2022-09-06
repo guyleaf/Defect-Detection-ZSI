@@ -5,12 +5,15 @@ from .utils import ConvModule
 class SemanticMaskHead(nn.Module):
     def __init__(self):
         super(SemanticMaskHead).__init__()
-        pass
+        self.conv_cfg = conv_cfg
+        self.norm_cfg = norm_cfg
 
         self.convs = nn.ModuleList()
         for i in range(self.num_convs):
             in_channels = (self.in_channels if i == 0 else self.conv_out_channels)
             padding = (self.conv_kernel_size - 1) // 2
+            
+            # conv for upsampling
             self.convs.append(
                 ConvModule(
                     in_channels,
