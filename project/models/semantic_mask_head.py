@@ -4,10 +4,34 @@ import  numpy as np
 from .utils import ConvModule
 
 class SemanticMaskHead(nn.Module):
-    def __init__(self):
+    def __init__(self, 
+        num_convs=4,
+        roi_feat_size=14,
+        in_channels=256,
+        conv_kernel_size=3,
+        conv_out_channels=256,
+        upsample_method='deconv',
+        upsample_ratio=2,
+        num_classes=4,
+        voc_path= None,
+        vec_path='data/coco/word_w2v_withbg_65_15.txt',
+        with_decoder=True,
+        sync_bg=True,
+        conv_cfg=None,
+        norm_cfg=None,
+    ):
         super(SemanticMaskHead).__init__()
+        self.num_convs = num_convs
+        self.in_channels = in_channels
+        self.conv_kernel_size = conv_kernel_size
+        self.conv_out_channels = conv_out_channels
+        self.upsample_method = upsample_method
+        self.upsample_ratio = upsample_ratio
+        self.with_decoder = with_decoder
+        self.sync_bg = sync_bg
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
+        
 
         # conv for upsampling
         self.convs = nn.ModuleList()
