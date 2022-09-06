@@ -1,5 +1,6 @@
 ﻿import torch
 import torch.nn as nn
+from torch.nn.modules.utils import _pair
 import  numpy as np
 from .utils import ConvModule
 
@@ -12,25 +13,44 @@ class SemanticMaskHead(nn.Module):
         conv_out_channels=256,
         upsample_method='deconv',
         upsample_ratio=2,
-        num_classes=4,
-        voc_path= None,
-        vec_path='data/coco/word_w2v_withbg_65_15.txt',
-        with_decoder=True,
-        sync_bg=True,
+        num_classes=4, # modify from 81 -> 4
+        semantic_dims=300,
+        seen_class=True,
+        gzsd=False,
+        share_semantic=False,
+        sync_bg=True, # reference from zero-shot-mask-rcnn-BARPN-bbox_mask_sync_bg_65_15_decoder_notanh.py
+        voc_path=None,
+        vec_path='data/coco/word_w2v_withbg_65_15.txt', # reference from zero-shot-mask-rcnn-BARPN-bbox_mask_sync_bg_65_15_decoder_notanh.py
+        with_learnable_kernel=True,
+        with_decoder=True, # reference from zero-shot-mask-rcnn-BARPN-bbox_mask_sync_bg_65_15_decoder_notanh.py
+        class_agnostic=False,
         conv_cfg=None,
         norm_cfg=None,
+        loss_mask=dict(type='CrossEntropyLoss', use_mask=True, loss_weight=1.0),
+        loss_ed=dict(type='MSELoss', loss_weight=0.5)
     ):
         super(SemanticMaskHead).__init__()
+        self.seen_class = seen_class
+        self.gzsd = gzsd
+        self.share_semantic = share_semantic
+        self.with_learnable_kernel = with_learnable_kernel
+        self.with_decoder = with_decoder
         self.num_convs = num_convs
+        # WARN: roi_feat_size is reserved and not used
+        self.roi_feat_size = _pair(roi_feat_size)
         self.in_channels = in_channels
         self.conv_kernel_size = conv_kernel_size
         self.conv_out_channels = conv_out_channels
         self.upsample_method = upsample_method
         self.upsample_ratio = upsample_ratio
-        self.with_decoder = with_decoder
-        self.sync_bg = sync_bg
+        self.num_classes = num_classes
+        self.class_agnostic = class_agnostic
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
+        self.fp16_enabled = False
+        self.loss_mask = build_loss(loss_mask)
+        self.loss_ed = build_loss(loss_ed)
+        self.sync_bg=sync_bg
         
 
         # conv for upsampling
@@ -93,7 +113,26 @@ class SemanticMaskHead(nn.Module):
             voc = None
 
         vec_load = np.loadtxt(vec_path, dtype='float32', delimiter=',')
-    
+
+        vec = vec_load[:, :num_classes]
+        vec_unseen = np.concatenate([vec_load[:, 0:1], vec_load[:, num_classes:]], axis=1)
+        vec = torch.tensor(vec, dtype=torch.float32)
+        if voc is not None:
+            voc = torch.tensor(voc, dtype=torch.float32)
+        vec_unseen = torch.tensor(vec_unseen, dtype=torch.float32)
+        self.vec_unseen = vec_unseen.cuda()
+        self.vec = vec.cuda()  # 300*n
+        self.conv_vec = nn.Conv2d(300, num_classes, 1, bias=False)
+
+        self.conv_vec.weight.data = torch.unsqueeze(torch.unsqueeze(self.vec.t(), -1), -1)
+
+        if not self.seen_class:
+            self.con_vec_t = nn.Conv2d(num_classes, 300, 1, bias=False)
+            self.con_vec_t.weight.data = torch.unsqueeze(torch.unsqueeze(self.vec, -1), -1)
+            self.conv_vec_unseen = nn.Conv2d(300, vec_unseen.shape[1], 1, bias=False)
+            self.conv_vec_unseen.weight.data = torch.unsqueeze(torch.unsqueeze(self.vec_unseen.t(), -1), -1)
+
+
     def forward(self, x, bg_vector=None):
         # replace bg by ba-rpn
         if bg_vector and self.sync_bg:
