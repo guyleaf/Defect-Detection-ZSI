@@ -3,6 +3,7 @@ torch ~= 1.12.1
 torchvision ~= 0.13.0
 opencv-python ~= 4.6.0.66
 matplotlib ~= 3.5.3
+pycocotools ~= 2.0.4
 typed-argument-parser
 
 black
