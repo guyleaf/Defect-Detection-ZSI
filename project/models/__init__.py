@@ -4,8 +4,11 @@ import pytorch_lightning as pl
 import torch
 from pytorch_lightning.utilities.types import STEP_OUTPUT
 
-from ..data import ImageAnnotation, ImageMetadata
-from .zero_shot_mask_rcnn import ZeroShotMaskRCNN
+from project.data import ImageAnnotation, ImageMetadata
+from project.models.zero_shot_mask_rcnn import ZeroShotMaskRCNN
+
+
+__all__ = ["ZeroShotMaskModel"]
 
 
 class ZeroShotMaskModel(pl.LightningModule):
@@ -14,6 +17,7 @@ class ZeroShotMaskModel(pl.LightningModule):
         self.model = ZeroShotMaskRCNN()
         self.lr = lr
         self.momentum = momentum
+        self.save_hyperparameters()
 
     def forward(self, *args):
         return self.model(*args)
@@ -23,6 +27,7 @@ class ZeroShotMaskModel(pl.LightningModule):
         return
 
     def validation_step(self, batch: tuple) -> Optional[STEP_OUTPUT]:
+        # TODO: provide loss output
         output = self(*batch)
         return
 
