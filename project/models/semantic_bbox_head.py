@@ -21,7 +21,7 @@ class SemanticBBoxHead(nn.Module):
         voc_path='vb/vocabulary_w2v.txt',
         vec_path='vb/word_w2v_withbg_65_15.txt',
         use_lsoftmax=False,
-        with_decoder=False,
+        with_decoder=True,
         sync_bg=True, # reference from zero-shot-mask-rcnn-BARPN-bbox_mask_sync_bg_65_15_decoder_notanh.py
         semantic_norm=False,
         target_means=[0., 0., 0., 0.],
@@ -67,7 +67,6 @@ class SemanticBBoxHead(nn.Module):
         self.use_lsoftmax = use_lsoftmax
         self.with_decoder = with_decoder
         self.semantic_norm = semantic_norm
-        self.with_decoder = with_decoder
         self.sync_bg = sync_bg
 
         assert with_reg or with_semantic
@@ -206,6 +205,7 @@ class SemanticBBoxHead(nn.Module):
             semantic_feature = self.fc_semantic(x_semantic)
             if self.sync_bg:
                 with torch.no_grad():
+                    xxxx = self.vec[:, 0]
                     self.vec[:, 0] = bg_vector
                     if not self.seen_class:
                         self.vec_unseen[:, 0] = bg_vector
@@ -274,9 +274,9 @@ class SemanticBBoxHead(nn.Module):
 if __name__ == '__main__':
     ZSD = SemanticBBoxHead().cuda()
     x = torch.randn(1, 2048, 14, 14).cuda()
-    y = ZSD(x)
+    bg = torch.randn(300).cuda()
+    y = ZSD(x, bg)
     
-    x=0
         
 
         
