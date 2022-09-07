@@ -5,7 +5,8 @@ from torch.nn.modules.utils import _pair
 import  numpy as np
 
 from utils import ConvModule
-
+from loss.mse_loss import MSELoss
+from loss.cross_entropy_loss import CrossEntropyLoss
 
 print(torch.__version__)
 print(torch.cuda.is_available())
@@ -32,8 +33,8 @@ class SemanticMaskHead(nn.Module):
         class_agnostic=False,
         conv_cfg=None,
         norm_cfg=None,
-        # loss_mask=dict(type='CrossEntropyLoss', use_mask=True, loss_weight=1.0),
-        # loss_ed=dict(type='MSELoss', loss_weight=0.5)
+        loss_mask=CrossEntropyLoss(use_mask=True, loss_weight=1.0),
+        loss_ed=MSELoss(reduction='mean', loss_weight=0.5)
     ):
         super(SemanticMaskHead, self).__init__()
         self.seen_class = seen_class
@@ -54,8 +55,8 @@ class SemanticMaskHead(nn.Module):
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         self.fp16_enabled = False
-        # self.loss_mask = build_loss(loss_mask)
-        # self.loss_ed = build_loss(loss_ed)
+        self.loss_mask = loss_mask
+        self.loss_ed = loss_ed
         self.sync_bg=sync_bg
         
 
@@ -186,6 +187,9 @@ class SemanticMaskHead(nn.Module):
                 d_x = self.d_kernel_semantic(x)
             d_x = self.dconvT(d_x)
 
+        # compute reconstructed error 
+        reconstructed_error = self.loss_ed(d_x, conv4_x)
+
         # classification module
         mask_pred_seen = self.conv_vec(x)
         if not self.seen_class and not self.gzsd:
@@ -201,7 +205,6 @@ class SemanticMaskHead(nn.Module):
         else:
             return mask_pred_seen, conv4_x, d_x
         
-        # TODO compute reconstructed error
         # TODO compute BCE loss
     
     def init_weights(self):
