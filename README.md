@@ -12,8 +12,8 @@ What it does
 project 資料夾只寫定義，測試調參在 tests 寫，以 OO 去使用 project 內的 class
 * [ ] model implementation
 * [ ] training, testing/inference procedure (測試跟訓練調參統一寫在 tests 裡面，看要怎麼規劃流程才比較好做)
-* [ ] dataset implementation
-* [ ] ...
+* [x] dataset implementation
+* [ ] prepare word-vectors
 
 ## How to run
 

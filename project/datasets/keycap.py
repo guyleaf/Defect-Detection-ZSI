@@ -7,11 +7,20 @@ import torch
 import torchvision.transforms as transforms
 from pycocotools.coco import COCO
 from pytorch_lightning import LightningDataModule
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import DataLoader, Dataset
 
 from project.data import ImageAnnotation, ImageMetadata
 
-DEFAULT_TRANSFORMS = transforms.Compose(
+DEFAULT_TRAIN_TRANSFORMS = transforms.Compose(
+    [
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+        ),
+    ]
+)
+
+DEFAULT_TEST_TRANSFORMS = transforms.Compose(
     [
         transforms.ToTensor(),
         transforms.Normalize(
@@ -26,12 +35,12 @@ class KeycapDataset(Dataset):
         self,
         img_dir: str,
         ann_file: Optional[str] = None,
-        transforms: transforms.Compose = DEFAULT_TRANSFORMS,
+        transforms: transforms.Compose = DEFAULT_TRAIN_TRANSFORMS,
     ) -> None:
         super().__init__()
         self._img_dir = img_dir
         self._imgs = os.listdir(img_dir)
-        self._transforms = transforms
+        self.transforms = transforms
         self._ann_loaded = False
         if ann_file:
             self._ann_loaded = True
@@ -115,7 +124,7 @@ class KeycapDataset(Dataset):
         img, metadata = self._get_img_and_metadata(idx)
         annotation = self._get_annotation(idx)
 
-        img = self._transforms(img)
+        img = self.transforms(img)
         return img, metadata, annotation
 
 
@@ -135,24 +144,30 @@ class KeycapDataModule(LightningDataModule):
             ann_file = os.path.join(
                 self._root_dir, "annotations", "train_seen.json"
             )
-            keycap_full = KeycapDataset(img_dir=img_dir, ann_file=ann_file)
-            num_imgs = len(keycap_full)
-            train_num_imgs = ceil(num_imgs * self._train_val_ratio)
-
-            self.keycap_train, self.keycap_val = random_split(
-                keycap_full, [train_num_imgs, num_imgs - train_num_imgs]
+            self.keycap_train = KeycapDataset(
+                img_dir=img_dir,
+                ann_file=ann_file,
+                transforms=DEFAULT_TRAIN_TRANSFORMS,
             )
+            # num_imgs = len(keycap_full)
+            # train_num_imgs = ceil(num_imgs * self._train_val_ratio)
+
+            # self.keycap_train, self.keycap_val = random_split(
+            #     keycap_full, [train_num_imgs, num_imgs - train_num_imgs]
+            # )
 
         # Assign test dataset for use in dataloader(s)
         if stage == "test" or stage is None:
             img_dir = os.path.join(self._root_dir, "test_unseen")
-            self.keycap_test = KeycapDataset(img_dir=img_dir)
+            self.keycap_test = KeycapDataset(
+                img_dir=img_dir, transforms=DEFAULT_TEST_TRANSFORMS
+            )
 
     def train_dataloader(self):
         return DataLoader(self.keycap_train, batch_size=self._batch_size)
 
-    def val_dataloader(self):
-        return DataLoader(self.keycap_val, batch_size=self._batch_size)
+    # def val_dataloader(self):
+    #     return DataLoader(self.keycap_val, batch_size=self._batch_size)
 
     def test_dataloader(self):
         return DataLoader(self.keycap_test, batch_size=self._batch_size)
