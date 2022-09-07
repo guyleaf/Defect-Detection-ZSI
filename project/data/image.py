@@ -35,7 +35,11 @@ class ImageAnnotation:
     """
 
     def __init__(
-        self, bboxes: torch.Tensor, labels: torch.Tensor, masks: list[torch.Tensor]
+        self,
+        bboxes: torch.Tensor,
+        labels: torch.Tensor,
+        masks: list[torch.Tensor],
+        **kwargs
     ) -> None:
         self._bboxes = bboxes
         self._labels = labels
@@ -47,13 +51,14 @@ class ImageAnnotation:
 
     @property
     def labels(self) -> torch.Tensor:
-        return self.labels
+        return self._labels
 
     @property
     def masks(self) -> list[torch.Tensor]:
         return self._masks
 
-    def to(self, device: Union[str, torch.device]) -> None:
-        self._bboxes = self._bboxes.to(device)
-        self._labels = self._labels.to(device)
-        self._masks = self._masks.to(device)
+    def to(self, device: Union[str, torch.device]) -> "ImageAnnotation":
+        bboxes = self._bboxes.to(device)
+        labels = self._labels.to(device)
+        masks = [mask.to(device) for mask in self._masks]
+        return ImageAnnotation(bboxes=bboxes, labels=labels, masks=masks)

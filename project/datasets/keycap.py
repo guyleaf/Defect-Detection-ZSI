@@ -1,31 +1,43 @@
-﻿from math import ceil
-import os
+﻿import os
 from typing import Optional
 
+import albumentations as A
 import PIL.Image as Image
 import torch
-import torchvision.transforms as transforms
+import numpy as np
+import cv2
+from albumentations.pytorch import ToTensorV2
+from project.data import ImageAnnotation, ImageMetadata
 from pycocotools.coco import COCO
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
+import matplotlib.pyplot as plt
 
-from project.data import ImageAnnotation, ImageMetadata
+mean = (0.485, 0.456, 0.406)
+std = (0.229, 0.224, 0.225)
 
-DEFAULT_TRAIN_TRANSFORMS = transforms.Compose(
+DEFAULT_TRAIN_TRANSFORMS = A.Compose(
     [
-        transforms.ToTensor(),
-        transforms.Normalize(
-            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+        A.LongestMaxSize(512),
+        A.Flip(p=0.5),
+        A.Normalize(mean=mean, std=std),
+        A.PadIfNeeded(
+            min_height=512, min_width=512, border_mode=cv2.BORDER_CONSTANT
         ),
-    ]
+        ToTensorV2(),
+    ],
+    bbox_params=A.BboxParams("coco", label_fields=["labels"]),
 )
 
-DEFAULT_TEST_TRANSFORMS = transforms.Compose(
+
+DEFAULT_TEST_TRANSFORMS = A.Compose(
     [
-        transforms.ToTensor(),
-        transforms.Normalize(
-            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+        A.LongestMaxSize(512),
+        A.Normalize(mean=mean, std=std),
+        A.PadIfNeeded(
+            min_height=512, min_width=512, border_mode=cv2.BORDER_CONSTANT
         ),
+        ToTensorV2(),
     ]
 )
 
@@ -35,12 +47,12 @@ class KeycapDataset(Dataset):
         self,
         img_dir: str,
         ann_file: Optional[str] = None,
-        transforms: transforms.Compose = DEFAULT_TRAIN_TRANSFORMS,
+        transforms: A.Compose = DEFAULT_TRAIN_TRANSFORMS,
     ) -> None:
         super().__init__()
         self._img_dir = img_dir
         self._imgs = os.listdir(img_dir)
-        self.transforms = transforms
+        self._transforms = transforms
         self._ann_loaded = False
         if ann_file:
             self._ann_loaded = True
@@ -64,51 +76,52 @@ class KeycapDataset(Dataset):
 
     def _get_img_and_metadata(
         self, idx: int
-    ) -> tuple[Image.Image, ImageMetadata]:
+    ) -> tuple[np.ndarray, ImageMetadata]:
         img_name = self._get_img_name(idx)
         img_path = os.path.join(self._img_dir, img_name)
 
         img = Image.open(img_path)
+        img = np.array(img)
 
-        img_metadata = ImageMetadata(name=img_name, size=tuple(img.size[::-1]))
+        img_metadata = ImageMetadata(name=img_name, size=tuple(img.shape[:-1]))
         return img, img_metadata
 
     def _convert_mask_into_binary(
         self, ann_info: list[dict]
-    ) -> list[torch.Tensor]:
+    ) -> list[np.ndarray]:
         masks = []
         for ann in ann_info:
             mask = self._coco.annToMask(ann)
-            masks.append(torch.from_numpy(mask))
+            masks.append(mask)
         return masks
 
-    def _parse_annotation(self, ann_info: list[dict]) -> ImageAnnotation:
+    def _parse_annotation(
+        self, ann_info: list[dict]
+    ) -> tuple[list[tuple[int, int, int, int]], list[int], list[np.ndarray]]:
         gt_bboxes = []
         gt_labels = []
 
         for ann in ann_info:
             x1, y1, w, h = ann["bbox"]
-            bbox = [x1, y1, x1 + w - 1, y1 + h - 1]
+            bbox = (x1, y1, x1 + w - 1, y1 + h - 1)
             if ann.get("iscrowd", False):
                 continue
 
             gt_bboxes.append(bbox)
             gt_labels.append(self._cat2label[ann["category_id"]])
 
-        gt_bboxes = torch.tensor(gt_bboxes, dtype=torch.float32)
-        gt_labels = torch.tensor(gt_labels, dtype=torch.float32)
         gt_masks = self._convert_mask_into_binary(ann_info)
 
-        return ImageAnnotation(
-            bboxes=gt_bboxes, labels=gt_labels, masks=gt_masks
-        )
+        return gt_bboxes, gt_labels, gt_masks
 
-    def _get_annotation(self, idx: int) -> ImageAnnotation:
+    def _get_annotation(
+        self, idx: int
+    ) -> tuple[list[tuple[int, int, int, int]], list[int], list[np.ndarray]]:
         # default instance
-        annotation = ImageAnnotation(
-            bboxes=torch.zeros((0, 4), dtype=torch.float32),
-            labels=torch.empty(0, dtype=torch.int64),
-            masks=torch.empty(0, dtype=torch.int64),
+        annotation = (
+            [],
+            [],
+            [],
         )
         if self._ann_loaded:
             img_id = self._img_infos[idx]["id"]
@@ -117,6 +130,16 @@ class KeycapDataset(Dataset):
             annotation = self._parse_annotation(ann_info)
         return annotation
 
+    def _postprocess_annotation(
+        self,
+        bboxes: list[tuple[int, int, int, int]],
+        labels: list[int],
+        masks: list[torch.Tensor],
+    ):
+        bboxes = torch.tensor(bboxes, dtype=torch.float32)
+        labels = torch.tensor(labels, dtype=torch.int64)
+        return ImageAnnotation(bboxes=bboxes, labels=labels, masks=masks)
+
     def __len__(self):
         return len(self._imgs)
 
@@ -124,7 +147,17 @@ class KeycapDataset(Dataset):
         img, metadata = self._get_img_and_metadata(idx)
         annotation = self._get_annotation(idx)
 
-        img = self.transforms(img)
+        # data augmentation
+        transformed_data = self._transforms(
+            image=img,
+            bboxes=annotation[0],
+            labels=annotation[1],
+            masks=annotation[2],
+        )
+        img = transformed_data["image"]
+        del transformed_data["image"]
+
+        annotation = self._postprocess_annotation(**transformed_data)
         return img, metadata, annotation
 
 
