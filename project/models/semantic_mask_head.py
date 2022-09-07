@@ -204,11 +204,9 @@ class SemanticMaskHead(nn.Module):
             return mask_pred_seen, mask_pred_unseen
         
         # compute loss
-        reconstructed_error = self.compute_reconstructed_error(conv4_x, d_x)
-        cls_loss = self.compute_binary_cls_error(mask_pred_seen, y)
         loss = {
-            "reconstructed_error" : reconstructed_error,
-            "BCE_loss" :  cls_loss
+            "reconstructed_error" : self.compute_reconstructed_error(conv4_x, d_x),
+            "BCE_loss" :  self.compute_binary_cls_error(mask_pred_seen, y)
         }
         return mask_pred_seen, loss
         # if not self.with_decoder:
