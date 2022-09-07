@@ -1,57 +1,53 @@
-﻿import torch
+﻿from typing import Optional
+import numpy as np
+import torch
 import torch.nn as nn
 from torch.nn.modules.utils import _pair
-from utils import ConvModule
-import numpy as np
-from loss.mse_loss import MSELoss
-from loss.cross_entropy_loss import CrossEntropyLoss
-from loss.smooth_l1_loss import SmoothL1Loss
+
+from .loss.cross_entropy_loss import CrossEntropyLoss
+from .loss.mse_loss import MSELoss
+from .loss.smooth_l1_loss import SmoothL1Loss
+from .utils import ConvModule, bbox_target, load_word_vectors
+
 
 class SemanticBBoxHead(nn.Module):
-    def __init__(self, 
-        with_avg_pool=False,
-        with_reg=True,
-        with_semantic=True,
-        roi_feat_size=14,
-        in_channels=2048,
-        num_classes=4, # keycap dataset
-        semantic_dims=300,
-        seen_class=True,
-        gzsd=False,
-        reg_with_semantic=False,
-        share_semantic=False,
-        voc_path='vb/vocabulary_w2v.txt',
-        vec_path='vb/word_w2v_withbg_65_15.txt',
-        use_lsoftmax=False,
-        with_decoder=True,
-        sync_bg=True, # reference from zero-shot-mask-rcnn-BARPN-bbox_mask_sync_bg_65_15_decoder_notanh.py
-        semantic_norm=False,
-        target_means=[0., 0., 0., 0.],
-        target_stds=[0.1, 0.1, 0.2, 0.2],
-        reg_class_agnostic=False,
-        num_shared_convs=0,
-        num_shared_fcs=2, # reference from zero-shot-mask-rcnn-BARPN-bbox_mask_sync_bg_65_15_decoder_notanh.py
-        num_semantic_convs=0,
-        num_semantic_fcs=0,
-        num_reg_convs=0,
-        num_reg_fcs=0,
-        conv_out_channels=256,
-        fc_out_channels=1024,
-        conv_cfg=None,
-        norm_cfg=None,
-        loss_bbox=SmoothL1Loss(beta=1.0, loss_weight=1.0),
-        loss_semantic=CrossEntropyLoss(use_mask=False, loss_weight=1.0),
-        loss_ed=MSELoss(reduction='mean', loss_weight=0.5)
+    vec: torch.Tensor
+    vec_unseen: torch.Tensor
+    voc: Optional[torch.Tensor]
+
+    def __init__(
+        self,
+        vec_path: str,
+        voc_path: Optional[str] = None,
+        with_avg_pool: bool = False,
+        roi_feat_size: int = 14,
+        in_channels: int = 2048,
+        num_classes: int = 4,  # keycap dataset
+        semantic_dims: int = 300,
+        seen_class: bool = True,
+        share_semantic: bool = False,
+        with_decoder: bool = True,
+        sync_bg: bool = True,  # reference from zero-shot-mask-rcnn-BARPN-bbox_mask_sync_bg_65_15_decoder_notanh.py
+        target_means: tuple[float, float, float, float] = [0.0, 0.0, 0.0, 0.0],
+        target_stds: tuple[float, float, float, float] = [0.1, 0.1, 0.2, 0.2],
+        reg_class_agnostic: bool = False,
+        num_shared_convs: int = 0,
+        num_shared_fcs: int = 2,  # reference from zero-shot-mask-rcnn-BARPN-bbox_mask_sync_bg_65_15_decoder_notanh.py
+        num_semantic_convs: int = 0,
+        num_semantic_fcs: int = 0,
+        num_reg_convs: int = 0,
+        num_reg_fcs: int = 0,
+        conv_out_channels: int = 256,
+        fc_out_channels: int = 1024,
+        loss_bbox_weight: float = 1.0,
+        loss_semantic_weight: float = 1.0,
+        loss_ed_weight: float = 0.5,
     ):
         super(SemanticBBoxHead, self).__init__()
-       
+
         self.seen_class = seen_class
-        self.gzsd = gzsd
-        self.reg_with_semantic = reg_with_semantic
         self.share_semantic = share_semantic
         self.with_avg_pool = with_avg_pool
-        self.with_reg = with_reg
-        self.with_semantic = with_semantic
         self.roi_feat_size = _pair(roi_feat_size)
         self.roi_feat_area = self.roi_feat_size[0] * self.roi_feat_size[1]
         self.in_channels = in_channels
@@ -59,24 +55,19 @@ class SemanticBBoxHead(nn.Module):
         self.target_means = target_means
         self.target_stds = target_stds
         self.reg_class_agnostic = reg_class_agnostic
-        self.fp16_enabled = False
-        self.use_lsoftmax = use_lsoftmax
         self.with_decoder = with_decoder
-        self.semantic_norm = semantic_norm
         self.sync_bg = sync_bg
-        self.loss_bbox = loss_bbox
-        self.loss_semantic = loss_semantic
-        self.loss_ed = loss_ed
-        assert with_reg or with_semantic
-        assert (num_shared_convs + num_shared_fcs + num_semantic_convs +
-                num_semantic_fcs + num_reg_convs + num_reg_fcs > 0)
+
+        total = num_shared_convs
+        total += num_shared_fcs
+        total += num_semantic_convs
+        total += num_semantic_fcs
+        total += num_reg_convs
+        total += num_reg_fcs
+        assert total > 0
+
         if num_semantic_convs > 0 or num_reg_convs > 0:
             assert num_shared_fcs == 0
-        if not self.with_semantic:
-            assert num_semantic_convs == 0 and num_semantic_fcs == 0
-        if not self.with_reg:
-            assert num_reg_convs == 0 and num_reg_fcs == 0
-            
 
         self.num_shared_convs = num_shared_convs
         self.num_shared_fcs = num_shared_fcs
@@ -86,94 +77,113 @@ class SemanticBBoxHead(nn.Module):
         self.num_reg_fcs = num_reg_fcs
         self.conv_out_channels = conv_out_channels
         self.fc_out_channels = fc_out_channels
-        self.conv_cfg = conv_cfg
-        self.norm_cfg = norm_cfg
 
-        # self.loss_bbox = build_loss(loss_bbox)
-        # self.loss_semantic = build_loss(loss_semantic)
-        # self.loss_ed = build_loss(loss_ed)
+        self.loss_bbox = SmoothL1Loss(beta=1.0, loss_weight=loss_bbox_weight)
+        self.loss_semantic = CrossEntropyLoss(
+            use_sigmoid=False, loss_weight=loss_semantic_weight
+        )
+        self.loss_ed = MSELoss(reduction="mean", loss_weight=loss_ed_weight)
 
         in_channels = self.in_channels
         in_channels *= self.roi_feat_area
 
         self.relu = nn.ReLU(inplace=True)
 
-        if self.with_reg:
-            out_dim_reg = 4 if reg_class_agnostic else 4 * num_classes
-            self.fc_reg = nn.Linear(in_channels, out_dim_reg)
+        out_dim_reg = 4 if reg_class_agnostic else 4 * num_classes
+        self.fc_reg = nn.Linear(in_channels, out_dim_reg)
 
-        if self.with_semantic:
-            self.fc_semantic = nn.Linear(self.in_channels, semantic_dims)
-            # voc = np.loadtxt('MSCOCO/vocabulary_w2v.txt', dtype='float32', delimiter=',')
-            if voc_path is not None:
-                voc = np.loadtxt(voc_path, dtype='float32', delimiter=',')
-            else:
-                voc = None
-            # vec = np.loadtxt('MSCOCO/word_w2v.txt', dtype='float32', delimiter=',')
-            vec_load = np.loadtxt(vec_path, dtype='float32', delimiter=',')
-            # if self.seen_class:
-            vec = vec_load[:, :num_classes]
-            # else:
-            vec_unseen = np.concatenate([vec_load[:, 0:1], vec_load[:, num_classes:]], axis=1)
-            vec = torch.tensor(vec, dtype=torch.float32)
-            if voc is not None:
-                voc = torch.tensor(voc, dtype=torch.float32)
-            vec_unseen = torch.tensor(vec_unseen, dtype=torch.float32)
-            self.vec = vec.cuda()  # 300*n
-            if voc is not None:
-                self.voc = voc.cuda()  # 300*66
-            else:
-               self.voc = None
-            self.vec_unseen = vec_unseen.cuda()
+        self.fc_semantic = nn.Linear(self.in_channels, semantic_dims)
+        if voc_path is not None:
+            voc: torch.Tensor = (
+                load_word_vectors(voc_path, as_torch=True).float().T
+            )
+        else:
+            voc = None
 
-            if self.voc is not None:
-                self.kernel_semantic = nn.Linear(self.voc.shape[1], self.vec.shape[0]) #n*300
-        
+        vec_load: torch.Tensor = load_word_vectors(
+            vec_path, as_torch=True
+        ).float()
+        # if self.seen_class:
+        vec = vec_load[:num_classes].T
+        # else:
+        vec_unseen = torch.cat(
+            [vec_load[0, None], vec_load[num_classes:]], dim=0
+        ).T
+
+        if voc is not None:
+            self.kernel_semantic = nn.Linear(
+                voc.shape[1], voc.shape[0]
+            )  # n*300
+
         # add shared convs and fcs
-        self.shared_convs, self.shared_fcs, last_layer_dim = \
-            self._add_conv_fc_branch(
-                self.num_shared_convs, self.num_shared_fcs, self.in_channels,
-                True)
+        (
+            self.shared_convs,
+            self.shared_fcs,
+            last_layer_dim,
+        ) = self._add_conv_fc_branch(
+            self.num_shared_convs, self.num_shared_fcs, self.in_channels, True
+        )
         self.shared_out_channels = last_layer_dim
 
         # add semantic specific branch
-        self.semantic_convs, self.semantic_fcs, self.semantic_last_dim = \
-            self._add_conv_fc_branch(
-                self.num_semantic_convs, self.num_semantic_fcs, self.shared_out_channels)
+        (
+            self.semantic_convs,
+            self.semantic_fcs,
+            self.semantic_last_dim,
+        ) = self._add_conv_fc_branch(
+            self.num_semantic_convs,
+            self.num_semantic_fcs,
+            self.shared_out_channels,
+        )
 
         # add reg specific branch
-        self.reg_convs, self.reg_fcs, self.reg_last_dim = \
-            self._add_conv_fc_branch(
-                self.num_reg_convs, self.num_reg_fcs, self.shared_out_channels)
-
-
-        
+        (
+            self.reg_convs,
+            self.reg_fcs,
+            self.reg_last_dim,
+        ) = self._add_conv_fc_branch(
+            self.num_reg_convs, self.num_reg_fcs, self.shared_out_channels
+        )
 
         # reconstruct fc_semantic and fc_reg since input channels are changed
-        if self.with_semantic:
-            self.fc_semantic = nn.Linear(self.semantic_last_dim, semantic_dims)
+        self.fc_semantic = nn.Linear(self.semantic_last_dim, semantic_dims)
+        if self.with_decoder:
+            self.d_fc_semantic = nn.Linear(
+                semantic_dims, self.semantic_last_dim
+            )
+        if voc is not None:
+            self.kernel_semantic = nn.Linear(
+                voc.shape[1], vec.shape[0]
+            )  # n*300
             if self.with_decoder:
-                self.d_fc_semantic = nn.Linear(semantic_dims, self.semantic_last_dim)
-            if self.voc is not None:
-                self.kernel_semantic = nn.Linear(self.voc.shape[1], self.vec.shape[0])  # n*300
-                if self.with_decoder:
-                    self.d_kernel_semantic = nn.Linear(self.vec.shape[0], self.voc.shape[1])  # n*300
-            else:
-                self.kernel_semantic = nn.Linear(self.vec.shape[1], self.vec.shape[1])
-                if self.with_decoder:
-                    self.d_kernel_semantic = nn.Linear(self.vec.shape[1], self.vec.shape[1])  # n*300
+                self.d_kernel_semantic = nn.Linear(
+                    vec.shape[0], voc.shape[1]
+                )  # n*300
+        else:
+            self.kernel_semantic = nn.Linear(vec.shape[1], vec.shape[1])
+            if self.with_decoder:
+                self.d_kernel_semantic = nn.Linear(
+                    vec.shape[1], vec.shape[1]
+                )  # n*300
 
-        if self.with_reg and not self.reg_with_semantic:
-            out_dim_reg = (4 if self.reg_class_agnostic else 4 *
-                           self.num_classes)
-            self.fc_reg = nn.Linear(self.reg_last_dim, out_dim_reg)
+        out_dim_reg = 4 if self.reg_class_agnostic else 4 * self.num_classes
+        self.fc_reg = nn.Linear(self.reg_last_dim, out_dim_reg)
 
-        self.fc_res = nn.Linear(self.vec.shape[0], self.vec.shape[0])
+        self.fc_res = nn.Linear(vec.shape[0], vec.shape[0])
         # self.fc_res = nn.Linear(self.semantic_last_dim, self.vec.shape[0])
 
-        
-    def forward(self, x, y, bg_vector=None):
+        self.register_buffer("vec", vec)
+        self.register_buffer("vec_unseen", vec_unseen)
+        self.register_buffer("voc", voc)
 
+    def forward(
+        self,
+        x: torch.Tensor,
+        bbox_targets: tuple[
+            torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
+        ],
+        bg_vector: torch.Tensor,
+    ):
         if self.num_shared_fcs > 0:
             x = x.view(x.size(0), -1)
             for fc in self.shared_fcs:
@@ -199,15 +209,13 @@ class SemanticBBoxHead(nn.Module):
         for fc in self.semantic_fcs:
             x_semantic = self.relu(fc(x_semantic))
 
-        if self.with_semantic:
-            semantic_feature = self.fc_semantic(x_semantic)
-            if self.sync_bg:
-                with torch.no_grad():
-                    xxxx = self.vec[:, 0]
-                    self.vec[:, 0] = bg_vector
-                    if not self.seen_class:
-                        self.vec_unseen[:, 0] = bg_vector
-        
+        semantic_feature = self.fc_semantic(x_semantic)
+        if self.sync_bg:
+            with torch.no_grad():
+                self.vec[:, 0] = bg_vector
+                if not self.seen_class:
+                    self.vec_unseen[:, 0] = bg_vector
+
         # predict semantic score
         if self.voc is not None:
             # matrix multiplication (semantic_feature, word-vector)
@@ -219,19 +227,34 @@ class SemanticBBoxHead(nn.Module):
                 d_semantic_score = self.d_kernel_semantic(semantic_score)
                 d_semantic_feature = torch.mm(d_semantic_score, self.voc.t())
                 d_semantic_feature = self.d_fc_semantic(d_semantic_feature)
-        
+            semantic_score = torch.mm(semantic_score, self.vec)
+        else:
+            semantic_score = self.kernel_semantic(self.vec)
+            semantic_score = torch.tanh(semantic_score)
+            semantic_score = torch.mm(semantic_feature, semantic_score)
+
         # predict bbox
         bbox_pred = self.fc_reg(x_reg)
 
-        loss = {
-            "reconstructed_error" : self.compute_reconstructed_error(x_semantic, d_semantic_feature),
-            "semantic_loss" : self.compute_semantic_loss(semantic_score, bbox_pred, y),
-            "bbox_loss" : self.compute_bbox_loss(bbox_pred, y)
-        }
+        losses = {}
+        if self.training:
+            labels, label_weights, bbox_targets, bbox_weights = bbox_targets
+            losses = {
+                "reconstructed_error": self.compute_reconstructed_error(
+                    x_semantic, d_semantic_feature
+                ),
+                "semantic_loss": self.compute_semantic_loss(
+                    semantic_score, labels, label_weights
+                ),
+                "bbox_loss": self.compute_bbox_loss(
+                    bbox_pred, labels, bbox_targets, bbox_weights
+                ),
+            }
+        return semantic_score, bbox_pred, losses
 
-        return semantic_score, bbox_pred, loss
-    
-    def get_target(self, sampling_results, gt_bboxes, gt_labels, rcnn_train_cfg):
+    def get_target(
+        self, sampling_results, gt_bboxes, gt_labels, rcnn_train_cfg
+    ):
         pos_proposals = [res.pos_bboxes for res in sampling_results]
         neg_proposals = [res.neg_bboxes for res in sampling_results]
         pos_gt_bboxes = [res.pos_gt_bboxes for res in sampling_results]
@@ -245,26 +268,48 @@ class SemanticBBoxHead(nn.Module):
             rcnn_train_cfg,
             reg_classes,
             target_means=self.target_means,
-            target_stds=self.target_stds)
+            target_stds=self.target_stds,
+        )
         return semantic_reg_targets
 
-    def compute_reconstructed_error(self, x, d_x):
-        self.reconstructed_error = self.loss_ed(x, d_x)
-        return self.reconstructed_error
-    
-    def compute_semantic_loss(self, semantic_score, bbox_pred, bbox_target):
-        self.semantic_loss = self.loss_semantic(semantic_score, bbox_pred, bbox_target, weight=None, reduction='mean', avg_factor=None)
-        return self.semantic_loss
+    def compute_reconstructed_error(self, x: torch.Tensor, d_x: torch.Tensor):
+        return self.loss_ed(x, d_x)
 
-    def compute_bbox_loss(self, bbox_pred, bbox_targets):
-        self.bbox_loss = self.loss_bbox(bbox_pred, bbox_targets)
-        return self.bbox_loss
-    
-    def _add_conv_fc_branch(self,
-                            num_branch_convs,
-                            num_branch_fcs,
-                            in_channels,
-                            is_shared=False):
+    def compute_semantic_loss(
+        self,
+        semantic_score: torch.Tensor,
+        labels: torch.Tensor,
+        label_weights: torch.Tensor,
+    ):
+        avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.0)
+        return self.loss_semantic(
+            semantic_score, labels, label_weights, avg_factor=avg_factor
+        )
+
+    def compute_bbox_loss(
+        self,
+        bbox_pred: torch.Tensor,
+        labels: torch.Tensor,
+        bbox_targets: torch.Tensor,
+        bbox_weights: torch.Tensor,
+    ):
+        pos_inds = labels > 0
+        if self.reg_class_agnostic:
+            pos_bbox_pred = bbox_pred.view(bbox_pred.size(0), 4)[pos_inds]
+        else:
+            pos_bbox_pred = bbox_pred.view(bbox_pred.size(0), -1, 4)[
+                pos_inds, labels[pos_inds]
+            ]
+        return self.loss_bbox(
+            pos_bbox_pred,
+            bbox_targets[pos_inds],
+            bbox_weights[pos_inds],
+            avg_factor=bbox_targets.size(0),
+        )
+
+    def _add_conv_fc_branch(
+        self, num_branch_convs, num_branch_fcs, in_channels, is_shared=False
+    ):
         """Add shared or separable branch
 
         convs -> avg pool (optional) -> fcs
@@ -275,38 +320,36 @@ class SemanticBBoxHead(nn.Module):
         if num_branch_convs > 0:
             for i in range(num_branch_convs):
                 conv_in_channels = (
-                    last_layer_dim if i == 0 else self.conv_out_channels)
+                    last_layer_dim if i == 0 else self.conv_out_channels
+                )
                 branch_convs.append(
                     ConvModule(
-                        conv_in_channels,
-                        self.conv_out_channels,
-                        3,
-                        padding=1,
-                        conv_cfg=self.conv_cfg,
-                        norm_cfg=self.norm_cfg))
+                        conv_in_channels, self.conv_out_channels, 3, padding=1
+                    )
+                )
             last_layer_dim = self.conv_out_channels
         # add branch specific fc layers
         branch_fcs = nn.ModuleList()
         if num_branch_fcs > 0:
             # for shared branch, only consider self.with_avg_pool
             # for separated branches, also consider self.num_shared_fcs
-            if (is_shared
-                    or self.num_shared_fcs == 0) and not self.with_avg_pool:
+            if (
+                is_shared or self.num_shared_fcs == 0
+            ) and not self.with_avg_pool:
                 last_layer_dim *= self.roi_feat_area
             for i in range(num_branch_fcs):
                 fc_in_channels = (
-                    last_layer_dim if i == 0 else self.fc_out_channels)
+                    last_layer_dim if i == 0 else self.fc_out_channels
+                )
                 branch_fcs.append(
-                    nn.Linear(fc_in_channels, self.fc_out_channels))
+                    nn.Linear(fc_in_channels, self.fc_out_channels)
+                )
             last_layer_dim = self.fc_out_channels
         return branch_convs, branch_fcs, last_layer_dim
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     ZSD = SemanticBBoxHead().cuda()
     x = torch.randn(1, 2048, 14, 14).cuda()
     bg = torch.randn(300).cuda()
     y = ZSD(x, bg)
-    
-        
-
-        

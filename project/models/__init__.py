@@ -19,20 +19,22 @@ class ZeroShotMaskModel(pl.LightningModule):
         self.momentum = momentum
         self.save_hyperparameters()
 
-    def forward(self, *args):
+    def forward(self, args):
         return self.model(*args)
 
     def training_step(self, batch: tuple) -> STEP_OUTPUT:
-        output = self(*batch)
+        output = self(batch)
         return
 
     def validation_step(self, batch: tuple) -> Optional[STEP_OUTPUT]:
         # TODO: provide loss output
-        output = self(*batch)
+        output = self(batch)
         return
 
     def test_step(self, batch: tuple) -> Optional[STEP_OUTPUT]:
-        output = self(*batch)
+        img_metas = batch[1]
+        bboxes, labels, masks, _ = self(batch)
+        
         return
 
     def configure_optimizers(self):
