@@ -13,11 +13,10 @@ from .conv_ws import ConvWS2d, conv_ws_2d
 from .norm import build_norm_layer
 
 
-
 def load_word_vectors(
-    path: str, delimiter: str = ",", as_torch: bool = False
+    path: str, as_torch: bool = False
 ) -> Union[np.ndarray, torch.Tensor]:
-    data = np.loadtxt(path, dtype=np.float32, delimiter=delimiter)
+    data = np.load(path)
     if as_torch:
         data = torch.from_numpy(data)
     return data
@@ -125,15 +124,15 @@ __all__ = [
     "BoxCoder",
     "Matcher",
     "BalancedPositiveNegativeSampler",
-    'conv_ws_2d', 
-    'ConvWS2d', 
-    'build_conv_layer', 
-    'ConvModule',
-    'build_norm_layer', 
-    'xavier_init', 
-    'normal_init', 
-    'uniform_init',
-    'kaiming_init', 
-    'bias_init_with_prob', 
-    'Scale'
+    "conv_ws_2d",
+    "ConvWS2d",
+    "build_conv_layer",
+    "ConvModule",
+    "build_norm_layer",
+    "xavier_init",
+    "normal_init",
+    "uniform_init",
+    "kaiming_init",
+    "bias_init_with_prob",
+    "Scale",
 ]

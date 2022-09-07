@@ -26,7 +26,6 @@ class BackgroundAwareRPNHead(nn.Module):
         in_channels: int,
         num_anchors: int,
         vec_path: str,
-        semantic_channels: int = 300,
         voc_path: Optional[str] = None,
     ) -> None:
         super().__init__()
@@ -37,24 +36,43 @@ class BackgroundAwareRPNHead(nn.Module):
         )
 
         vec, voc = self._load_word_vectors(vec_path, voc_path)
-        bg_vec = vec[:, 0].unsqueeze(-1).unsqueeze(-1)
+        bg_vec = vec[0]
 
+        semantic_channels = vec.size(1)
         # visual feature -> semantic_encoder -> semantice feature -> cls_logits
         self.semantic_encoder = nn.Conv2d(in_channels, semantic_channels, 1)
         self.cls_logits = nn.Conv2d(semantic_channels, num_anchors * 2, 1)
 
         self.bbox_pred = nn.Conv2d(in_channels, num_anchors * 4, 1)
 
+        if voc is not None:
+            hidden_channels = voc.size(0)
+            self.voc_convs = nn.Sequential(
+                nn.Conv2d(semantic_channels, hidden_channels, 1, bias=False),
+                nn.Conv2d(hidden_channels, semantic_channels, 1)
+            )
+        else:
+            self.voc_convs = None
+
         self.register_buffer("_voc", voc, persistent=False)
 
         # initialize weights
         self.apply(self._init_weights)
+        if self.voc_convs is not None:
+            self._init_voc_convs(voc)
         self._init_cls_logits(bg_vec)
+
+    @torch.no_grad()
+    def _init_voc_convs(self, voc: torch.Tensor):
+        weights = self.voc_convs[0]
+        weights.data = voc.unsqueeze(-1).unsqueeze(-1)
+        for param in self.voc_convs[0].parameters():
+            param.requires_grad = False
 
     @torch.no_grad()
     def _init_cls_logits(self, bg_vec: torch.Tensor):
         weights = self.cls_logits.weight
-        weights.data[::2] = bg_vec.expand(weights.size(0) // 2, -1)
+        weights.data[::2] = bg_vec.tile((weights.size(0) // 2, 1)).unsqueeze(-1).unsqueeze(-1)
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
@@ -80,8 +98,8 @@ class BackgroundAwareRPNHead(nn.Module):
 
         # classification branch
         semantic_feature = self.semantic_encoder(x)
-        if self._voc:
-            semantic_feature = torch.mm(semantic_feature, self._voc)
+        if self.voc_convs is not None:
+            semantic_feature = self.voc_convs(semantic_feature)
         cls_score = self.cls_logits(semantic_feature)
 
         # regression branch
@@ -134,6 +152,7 @@ class BackgroundAwareRPN(nn.Module):
         score_thresh: float = 0.0,
         min_size: float = 0.0,
     ) -> None:
+        super().__init__()
         self.head = head
         self.anchor_generator = anchor_generator
         self.box_coder = BoxCoder(weights=(1.0, 1.0, 1.0, 1.0))

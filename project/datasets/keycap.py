@@ -1,7 +1,7 @@
 ﻿import os
 from copy import deepcopy
 from math import ceil
-from typing import Optional
+from typing import Optional, Union
 
 import albumentations as A
 import cv2
@@ -72,9 +72,6 @@ class KeycapDataset(Dataset):
     def _load_annotations(self, ann_file: str):
         self._coco = COCO(ann_file)
         self._cat_ids = self._coco.getCatIds()
-        self._cat2label = {
-            cat_id: i + 1 for i, cat_id in enumerate(self._cat_ids)
-        }
         img_ids = self._coco.getImgIds()
         self._img_infos = self._coco.loadImgs(img_ids)
 
@@ -112,7 +109,7 @@ class KeycapDataset(Dataset):
                 continue
 
             gt_bboxes.append(bbox)
-            gt_labels.append(self._cat2label[ann["category_id"]])
+            gt_labels.append(ann["category_id"])
 
         gt_masks = self._convert_masks_into_binary_masks(ann_info)
 
@@ -222,19 +219,19 @@ class KeycapDataModule(LightningDataModule):
 
 if __name__ == "__main__":
     img_dir = (
-        "E:\\Git\\Defect-Detection-ZSI\\tests\\datasets\\keycap\\train_seen"
+        "E:\\Git\\Defect-Detection-ZSI\\data\\keycap\\train_seen"
     )
-    ann_file = "E:\\Git\\Defect-Detection-ZSI\\tests\\datasets\\keycap\\annotations\\train_seen.json"
+    ann_file = "E:\\Git\\Defect-Detection-ZSI\\data\\keycap\\annotations\\train_seen.json"
     dataset = KeycapDataset(img_dir=img_dir, ann_file=ann_file)
     print(dataset[0])
     img_dir = (
-        "E:\\Git\\Defect-Detection-ZSI\\tests\\datasets\\keycap\\test_unseen"
+        "E:\\Git\\Defect-Detection-ZSI\\data\\keycap\\test_unseen"
     )
     dataset = KeycapDataset(img_dir=img_dir)
     print(dataset[0])
 
     data_module = KeycapDataModule(
-        root_dir="E:\\Git\\Defect-Detection-ZSI\\tests\\datasets\\keycap",
+        root_dir="E:\\Git\\Defect-Detection-ZSI\\data\\keycap",
         batch_size=3,
     )
     data_module.setup()

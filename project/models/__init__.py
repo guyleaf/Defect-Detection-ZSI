@@ -12,9 +12,9 @@ __all__ = ["ZeroShotMaskModel"]
 
 
 class ZeroShotMaskModel(pl.LightningModule):
-    def __init__(self, lr: float = 1e-3, momentum: float = 0.9) -> None:
+    def __init__(self, lr: float = 1e-3, momentum: float = 0.9, **kwargs) -> None:
         super().__init__()
-        self.model = ZeroShotMaskRCNN()
+        self.model = ZeroShotMaskRCNN(**kwargs)
         self.lr = lr
         self.momentum = momentum
         self.save_hyperparameters()

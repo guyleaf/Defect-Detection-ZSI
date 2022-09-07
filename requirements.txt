@@ -6,6 +6,7 @@ matplotlib ~= 3.5.3
 pycocotools ~= 2.0.4
 albumentations ~= 1.2.1
 torchmetrics ~= 0.9.3
+mmcv-full ~= 1.6.1
 typed-argument-parser
 
 black

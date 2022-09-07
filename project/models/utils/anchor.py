@@ -40,7 +40,7 @@ class AnchorGenerator(nn.Module):
         if not isinstance(ratios, (list, tuple)):
             ratios = (ratios,)
 
-        self._num_anchors = len(sizes) * len(scales) * len(ratios)
+        self._num_anchors_per_size = len(scales) * len(ratios)
         self._cell_anchors = [
             self._generate_anchors(size, scales, ratios)
             for size in range(len(sizes))
@@ -64,8 +64,8 @@ class AnchorGenerator(nn.Module):
         return base_anchors.round()
 
     @property
-    def num_anchors(self) -> int:
-        return self._num_anchors
+    def num_anchors_per_size(self) -> int:
+        return self._num_anchors_per_size
 
     # For every combination of (a, (g, s), i) in (self.cell_anchors, zip(grid_sizes, strides), 0:2),
     # output g[i] anchors that are s[i] distance apart in direction i, with the same dimensions as a.
