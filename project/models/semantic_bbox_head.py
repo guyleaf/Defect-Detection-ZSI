@@ -172,7 +172,7 @@ class SemanticBBoxHead(nn.Module):
         # self.fc_res = nn.Linear(self.semantic_last_dim, self.vec.shape[0])
 
         
-    def forward(self, x, bg_vector=None):
+    def forward(self, x, y, bg_vector=None):
 
         if self.num_shared_fcs > 0:
             x = x.view(x.size(0), -1)
@@ -223,18 +223,25 @@ class SemanticBBoxHead(nn.Module):
         # predict bbox
         bbox_pred = self.fc_reg(x_reg)
 
-        if self.with_decoder:
-            return semantic_score, bbox_pred, x_semantic, d_semantic_feature
-        else:
-            return semantic_score, bbox_pred
+        loss = {
+            "reconstructed_error" : self.compute_reconstructed_error(x_semantic, d_semantic_feature),
+            "semantic_loss" : self.compute_semantic_loss(semantic_score, bbox_pred, y),
+            "bbox_loss" : self.compute_bbox_loss(bbox_pred, y)
+        }
+
+        return semantic_score, bbox_pred, loss
     
     def compute_reconstructed_error(self, x, d_x):
         self.reconstructed_error = self.loss_ed(x, d_x)
         return self.reconstructed_error
     
     def compute_semantic_loss(self, semantic_score, bbox_pred, bbox_target):
-        self.semantic_loss = self.loss_semantic(pred, label, weight=None, reduction='mean', avg_factor=None)
+        self.semantic_loss = self.loss_semantic(semantic_score, bbox_pred, bbox_target, weight=None, reduction='mean', avg_factor=None)
+        return self.semantic_loss
 
+    def compute_bbox_loss(self, bbox_pred, bbox_targets):
+        self.bbox_loss = self.loss_bbox(bbox_pred, bbox_targets)
+        return self.bbox_loss
     
     def _add_conv_fc_branch(self,
                             num_branch_convs,
