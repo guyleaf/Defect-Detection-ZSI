@@ -2,14 +2,14 @@
 import torch
 import torch.nn as nn
 from torch.nn.modules.utils import _pair
-import  numpy as np
+import numpy as np
+import mmcv
 
 from utils import ConvModule
+from utils import mask_target
 from loss.mse_loss import MSELoss
 from loss.cross_entropy_loss import CrossEntropyLoss
 
-print(torch.__version__)
-print(torch.cuda.is_available())
 
 class SemanticMaskHead(nn.Module):
     def __init__(self, 
@@ -213,7 +213,18 @@ class SemanticMaskHead(nn.Module):
         #     return mask_pred_seen
         # else:
         #     return mask_pred_seen, conv4_x, d_x
-        
+
+    
+
+    def get_target(self, sampling_results, gt_masks, rcnn_train_cfg):
+        pos_proposals = [res.pos_bboxes for res in sampling_results]
+        pos_assigned_gt_inds = [
+            res.pos_assigned_gt_inds for res in sampling_results
+        ]
+        mask_targets = mask_target(pos_proposals, pos_assigned_gt_inds,
+                                   gt_masks, rcnn_train_cfg)
+        return mask_targets
+ 
     def compute_reconstructed_error(self, x, d_x):
         self.reconstructed_error = self.loss_ed(x, d_x)
         return self.reconstructed_error

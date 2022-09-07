@@ -11,6 +11,7 @@ from .rpn import concat_box_prediction_layers
 from .conv_module import ConvModule, build_conv_layer
 from .conv_ws import ConvWS2d, conv_ws_2d
 from .norm import build_norm_layer
+from .mask_utils import  mask_target_single, mask_target
 
 
 def load_word_vectors(
@@ -128,6 +129,8 @@ __all__ = [
     "ConvWS2d",
     "build_conv_layer",
     "ConvModule",
+    "mask_utils",
+    "mask_target_single",
     "build_norm_layer",
     "xavier_init",
     "normal_init",
