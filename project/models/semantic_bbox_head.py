@@ -198,9 +198,20 @@ class SemanticBBoxHead(nn.Module):
             # matrix multiplication (semantic_feature, word-vector)
             semantic_score = torch.mm(semantic_feature, self.voc)
             semantic_score = self.kernel_semantic(semantic_score)
+
+            # decode
+            if self.with_decoder:
+                d_semantic_score = self.d_kernel_semantic(semantic_score)
+                d_semantic_feature = torch.mm(d_semantic_score, self.voc.t())
+                d_semantic_feature = self.d_fc_semantic(d_semantic_feature)
         
         # predict bbox
         bbox_pred = self.fc_reg(x_reg)
+
+        if self.with_decoder:
+            return semantic_score, bbox_pred, x_semantic, d_semantic_feature
+        else:
+            return semantic_score, bbox_pred
     
     def _add_conv_fc_branch(self,
                             num_branch_convs,
