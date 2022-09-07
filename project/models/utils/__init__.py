@@ -12,6 +12,7 @@ from .conv_module import ConvModule, build_conv_layer
 from .conv_ws import ConvWS2d, conv_ws_2d
 from .norm import build_norm_layer
 from .mask_utils import  mask_target_single, mask_target
+from .bbox_utils import  bbox_target
 
 
 def load_word_vectors(
@@ -131,6 +132,9 @@ __all__ = [
     "ConvModule",
     "mask_utils",
     "mask_target_single",
+    "mask_target",
+    "bbox_utils",
+    "bbox_target",
     "build_norm_layer",
     "xavier_init",
     "normal_init",
