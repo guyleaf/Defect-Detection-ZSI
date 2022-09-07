@@ -3,7 +3,9 @@ import torch.nn as nn
 from torch.nn.modules.utils import _pair
 from utils import ConvModule
 import numpy as np
-
+from loss.mse_loss import MSELoss
+from loss.cross_entropy_loss import CrossEntropyLoss
+from loss.smooth_l1_loss import SmoothL1Loss
 
 class SemanticBBoxHead(nn.Module):
     def __init__(self, 
@@ -37,15 +39,9 @@ class SemanticBBoxHead(nn.Module):
         fc_out_channels=1024,
         conv_cfg=None,
         norm_cfg=None,
-        loss_bbox=dict(
-            type='SmoothL1Loss', beta=1.0, loss_weight=1.0
-        ),
-        loss_semantic=dict(
-            type='CrossEntropyLoss',
-            use_sigmoid=False,
-            loss_weight=1.0
-        ),
-        loss_ed=dict(type='MSELoss', loss_weight=0.5)
+        loss_bbox=SmoothL1Loss(beta=1.0, loss_weight=1.0),
+        loss_semantic=CrossEntropyLoss(use_mask=False, loss_weight=1.0),
+        loss_ed=MSELoss(reduction='mean', loss_weight=0.5)
     ):
         super(SemanticBBoxHead, self).__init__()
        
@@ -68,7 +64,9 @@ class SemanticBBoxHead(nn.Module):
         self.with_decoder = with_decoder
         self.semantic_norm = semantic_norm
         self.sync_bg = sync_bg
-
+        self.loss_bbox = loss_bbox
+        self.loss_semantic = loss_semantic
+        self.loss_ed = loss_ed
         assert with_reg or with_semantic
         assert (num_shared_convs + num_shared_fcs + num_semantic_convs +
                 num_semantic_fcs + num_reg_convs + num_reg_fcs > 0)
@@ -229,6 +227,14 @@ class SemanticBBoxHead(nn.Module):
             return semantic_score, bbox_pred, x_semantic, d_semantic_feature
         else:
             return semantic_score, bbox_pred
+    
+    def compute_reconstructed_error(self, x, d_x):
+        self.reconstructed_error = self.loss_ed(x, d_x)
+        return self.reconstructed_error
+    
+    def compute_semantic_loss(self, semantic_score, bbox_pred, bbox_target):
+        self.semantic_loss = self.loss_semantic(pred, label, weight=None, reduction='mean', avg_factor=None)
+
     
     def _add_conv_fc_branch(self,
                             num_branch_convs,
