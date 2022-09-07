@@ -27,6 +27,7 @@ class BackgroundAwareRPNHead(nn.Module):
         num_anchors: int,
         vec_path: str,
         voc_path: Optional[str] = None,
+        **_
     ) -> None:
         super().__init__()
 
@@ -149,8 +150,8 @@ class BackgroundAwareRPN(nn.Module):
         test_pre_nms_top_n: int = 1000,
         test_post_nms_top_n: int = 1000,
         nms_thresh: float = 0.7,
-        score_thresh: float = 0.0,
-        min_size: float = 0.0,
+        cls_score_thresh: float = 0.0,
+        min_bbox_size: float = 0.0,
     ) -> None:
         super().__init__()
         self.head = head
@@ -176,8 +177,8 @@ class BackgroundAwareRPN(nn.Module):
         self._test_post_nms_top_n = test_post_nms_top_n
 
         self._nms_thresh = nms_thresh
-        self._score_thresh = score_thresh
-        self._min_size = min_size
+        self._cls_score_thresh = cls_score_thresh
+        self._min_bbox_size = min_bbox_size
 
     @property
     def pre_nms_top_n(self):
@@ -280,13 +281,13 @@ class BackgroundAwareRPN(nn.Module):
             boxes = box_ops.clip_boxes_to_image(boxes, image_meta.size)
 
             # remove small boxes
-            keep = box_ops.remove_small_boxes(boxes, self._min_size)
+            keep = box_ops.remove_small_boxes(boxes, self._min_bbox_size)
             boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
 
             # Note: it is the default implementation of Faster R-CNN
             # remove low scoring boxes
             # use >= for Backwards compatibility
-            keep = torch.where(scores >= self._score_thresh)[0]
+            keep = torch.where(scores >= self._cls_score_thresh)[0]
             boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
 
             # non-maximum suppression, independently done per level

@@ -27,9 +27,9 @@ class AnchorGenerator(nn.Module):
 
     def __init__(
         self,
-        sizes: Union[list[int], tuple[int]] = (4, 8, 16, 32, 64),
-        scales: Union[list[int], tuple[int]] = (8, 16, 32),
-        ratios: Union[list[float], tuple[float]] = (0.5, 1.0, 2.0),
+        sizes: Union[list[int], tuple[int, ...]] = (4, 8, 16, 32, 64),
+        scales: Union[list[int], tuple[int, ...]] = (8, 16, 32),
+        ratios: Union[list[float], tuple[float, ...]] = (0.5, 1.0, 2.0),
     ) -> None:
         super().__init__()
 

@@ -11,7 +11,7 @@ class Extractor(nn.Module):
         self,
         backbone_name: str = "resnet101",
         trainable_layers: int = 3,
-        returned_layers: Optional[list[int]] = None,
+        returned_layers: Optional[list[int]] = None
     ):
         super(Extractor, self).__init__()
         if backbone_name == "resnet34":
@@ -33,6 +33,10 @@ class Extractor(nn.Module):
             trainable_layers=trainable_layers,
             returned_layers=returned_layers,
         )
+
+    @property
+    def out_channels(self) -> int:
+        return self.backbone.out_channels
 
     def forward(self, x: Tensor) -> list:
         output = self.backbone(x)
