@@ -1,17 +1,18 @@
 ﻿import os
+from copy import deepcopy
+from math import ceil
 from typing import Optional
 
 import albumentations as A
+import cv2
+import numpy as np
 import PIL.Image as Image
 import torch
-import numpy as np
-import cv2
 from albumentations.pytorch import ToTensorV2
 from project.data import ImageAnnotation, ImageMetadata
 from pycocotools.coco import COCO
 from pytorch_lightning import LightningDataModule
-from torch.utils.data import DataLoader, Dataset
-import matplotlib.pyplot as plt
+from torch.utils.data import DataLoader, Dataset, random_split
 
 mean = (0.485, 0.456, 0.406)
 std = (0.229, 0.224, 0.225)
@@ -180,17 +181,21 @@ class KeycapDataModule(LightningDataModule):
             ann_file = os.path.join(
                 self._root_dir, "annotations", "train_seen.json"
             )
-            self.keycap_train = KeycapDataset(
+            keycap_train = KeycapDataset(
                 img_dir=img_dir,
                 ann_file=ann_file,
                 transforms=DEFAULT_TRAIN_TRANSFORMS,
             )
-            # num_imgs = len(keycap_full)
-            # train_num_imgs = ceil(num_imgs * self._train_val_ratio)
+            num_imgs = len(keycap_train)
+            train_num_imgs = ceil(num_imgs * self._train_val_ratio)
 
-            # self.keycap_train, self.keycap_val = random_split(
-            #     keycap_full, [train_num_imgs, num_imgs - train_num_imgs]
-            # )
+            self.keycap_train, self.keycap_val = random_split(
+                keycap_train, [train_num_imgs, num_imgs - train_num_imgs]
+            )
+
+            keycap_val = deepcopy(keycap_train)
+            keycap_val._transforms = DEFAULT_TEST_TRANSFORMS
+            self.keycap_val.dataset = keycap_val
 
         # Assign test dataset for use in dataloader(s)
         if stage == "test" or stage is None:
@@ -200,13 +205,19 @@ class KeycapDataModule(LightningDataModule):
             )
 
     def train_dataloader(self):
-        return DataLoader(self.keycap_train, batch_size=self._batch_size)
+        return DataLoader(
+            self.keycap_train, batch_size=self._batch_size, pin_memory=True
+        )
 
-    # def val_dataloader(self):
-    #     return DataLoader(self.keycap_val, batch_size=self._batch_size)
+    def val_dataloader(self):
+        return DataLoader(
+            self.keycap_val, batch_size=self._batch_size, pin_memory=True
+        )
 
     def test_dataloader(self):
-        return DataLoader(self.keycap_test, batch_size=self._batch_size)
+        return DataLoader(
+            self.keycap_test, batch_size=self._batch_size, pin_memory=True
+        )
 
 
 if __name__ == "__main__":
@@ -221,3 +232,12 @@ if __name__ == "__main__":
     )
     dataset = KeycapDataset(img_dir=img_dir)
     print(dataset[0])
+
+    data_module = KeycapDataModule(
+        root_dir="E:\\Git\\Defect-Detection-ZSI\\tests\\datasets\\keycap",
+        batch_size=3,
+    )
+    data_module.setup()
+    print(len(data_module.train_dataloader()))
+    print(len(data_module.val_dataloader()))
+    print(len(data_module.test_dataloader()))
