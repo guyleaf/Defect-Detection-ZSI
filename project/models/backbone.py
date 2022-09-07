@@ -36,6 +36,7 @@ class Extractor(nn.Module):
 
     def forward(self, x: Tensor) -> list:
         output = self.backbone(x)
+        print([(k, v.shape) for k, v in output.items()])
         output = list(output.values())
         return output
 
@@ -43,7 +44,7 @@ class Extractor(nn.Module):
 if __name__ == "__main__":
     with torch.no_grad():
         extractor = Extractor(backbone_name="resnet34")
-        x = torch.randn(1, 3, 224, 224)
-        # x = torch.randn(1, 3, 500, 500)
+        # x = torch.randn(1, 3, 224, 224)
+        x = torch.randn(1, 3, 500, 500)
         y = extractor(x)
         print(len(y))
