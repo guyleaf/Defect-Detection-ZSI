@@ -10,7 +10,7 @@ class SemanticBBoxHead(nn.Module):
         with_avg_pool=False,
         with_reg=True,
         with_semantic=True,
-        roi_feat_size=7,
+        roi_feat_size=14,
         in_channels=2048,
         num_classes=4, # keycap dataset
         semantic_dims=300,
@@ -48,7 +48,7 @@ class SemanticBBoxHead(nn.Module):
         loss_ed=dict(type='MSELoss', loss_weight=0.5)
     ):
         super(SemanticBBoxHead, self).__init__()
-        assert with_reg or with_semantic
+       
         self.seen_class = seen_class
         self.gzsd = gzsd
         self.reg_with_semantic = reg_with_semantic
@@ -69,6 +69,17 @@ class SemanticBBoxHead(nn.Module):
         self.semantic_norm = semantic_norm
         self.with_decoder = with_decoder
         self.sync_bg = sync_bg
+
+        assert with_reg or with_semantic
+        assert (num_shared_convs + num_shared_fcs + num_semantic_convs +
+                num_semantic_fcs + num_reg_convs + num_reg_fcs > 0)
+        if num_semantic_convs > 0 or num_reg_convs > 0:
+            assert num_shared_fcs == 0
+        if not self.with_semantic:
+            assert num_semantic_convs == 0 and num_semantic_fcs == 0
+        if not self.with_reg:
+            assert num_reg_convs == 0 and num_reg_fcs == 0
+            
 
         self.num_shared_convs = num_shared_convs
         self.num_shared_fcs = num_shared_fcs
@@ -140,6 +151,7 @@ class SemanticBBoxHead(nn.Module):
 
 
         
+
         # reconstruct fc_semantic and fc_reg since input channels are changed
         if self.with_semantic:
             self.fc_semantic = nn.Linear(self.semantic_last_dim, semantic_dims)
@@ -164,6 +176,11 @@ class SemanticBBoxHead(nn.Module):
 
         
     def forward(self, x, bg_vector=None):
+
+        if self.num_shared_fcs > 0:
+            x = x.view(x.size(0), -1)
+            for fc in self.shared_fcs:
+                x = self.relu(fc(x))
 
         # separate branches for "regression branch and semantic transform"
         x_semantic = x
