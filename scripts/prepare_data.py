@@ -5,11 +5,13 @@ import json
 import os
 
 import cv2
+from gensim import downloader
 import numpy as np
 from matplotlib import pyplot as plt
+from project.datasets.keycap import KeycapDataset
 
-
-SEEN_CLASSES = ["black_scratch", "white_scrath", "dent"]
+SEEN_CLASSES = ("background",) + KeycapDataset.SEEN_CLASSES
+UNSEEN_CLASSES = KeycapDataset.UNSEEN_CLASSES
 COLOR_MAP = {"1": [255, 0, 0], "2": [0, 255, 0], "3": [0, 0, 255]}
 
 
@@ -18,6 +20,12 @@ class Option:
         self.parser = argparse.ArgumentParser()
 
     def initialize(self):
+        self.parser.add_argument(
+            "--type",
+            type=str,
+            default="word_vector",
+            help="word_vector or annotation",
+        )
         self.parser.add_argument(
             "--mode", type=str, default="train_seen", help="train or test"
         )
@@ -42,7 +50,8 @@ class Option:
         self.opt = self.parser.parse_args()
         args = vars(self.opt)
 
-        self.opt.data_dir = os.path.join(self.opt.data_dir, self.opt.mode)
+        if self.opt.type == "annotation":
+            self.opt.data_dir = os.path.join(self.opt.data_dir, self.opt.mode)
 
         print("------------ Options -------------")
         for k, v in sorted(args.items()):
@@ -63,12 +72,14 @@ class MyEncoder(json.JSONEncoder):
             return super(MyEncoder, self).default(obj)
 
 
-def get_category_dic(
-    category_list: list[str], supercategory: str = "seen"
-):
+def get_category_dic(category_list: list[str], supercategory: str = "seen"):
     categories = []
     for idx, name in enumerate(category_list):
-        category = {"id": idx + 1, "name": name, "supercategory": supercategory}
+        category = {
+            "id": idx + 1,
+            "name": name,
+            "supercategory": supercategory,
+        }
         categories.append(category)
     return categories
 
@@ -130,7 +141,9 @@ def get_bbox(mask, image_id, start_ann_id):
             ann_list.append(
                 {
                     "iscrowd": 0,
-                    "segmentation": [contour.flatten() for contour in contours],
+                    "segmentation": [
+                        contour.flatten() for contour in contours
+                    ],
                     "area": area,
                     "bbox": bbox,  # (x, y, w, h)
                     "category_id": gray_scale + 1,
@@ -154,6 +167,21 @@ def get_annotation_dic(path, image_id, start_ann_id=0):
 
     ann_list = get_bbox(mask, image_id, start_ann_id)
     return ann_list
+
+
+def get_category_word_vectors(categories: tuple[str], discard_if_not_exist: bool = False):
+    word_dict = downloader.load("word2vec-google-news-300")
+    word_vectors = []
+    for category in categories:
+        if category not in word_dict and discard_if_not_exist:
+            continue
+
+        if "_" in category:
+            word_vector = word_dict.get_mean_vector(category)
+        else:
+            word_vector = word_dict[category]
+        word_vectors.append(word_vector)
+    return np.stack(word_vectors)
 
 
 def visualization(coco, opt):
@@ -191,11 +219,10 @@ def visualization(coco, opt):
         plt.show()
 
 
-def main():
-    opt = Option().parse()
+def generate_annotation_file(opt: argparse.Namespace):
     images = []
     annotations = []
-    categories = get_category_dic(SEEN_CLASSES, "seen")
+    seen_categories = get_category_dic(SEEN_CLASSES, "seen")
 
     ############################# make COCO #############################
     start_ann_id = 0
@@ -209,22 +236,58 @@ def main():
         "licenses": [],
         "images": images,
         "annotations": annotations,
-        "categories": categories,
+        "categories": seen_categories,
     }
     ############################# make COCO #############################
 
     ############################# create json file #############################
-    if not os.path.isdir(opt.output_dir):
-        os.makedirs(opt.output_dir)
 
     with open(os.path.join(opt.output_dir, opt.mode + ".json"), "w") as f:
         json.dump(coco, f, sort_keys=True, cls=MyEncoder)
 
-    print("save json to ", os.path.join(opt.output_dir, opt.mode + ".json"))
+    print("save json to", os.path.join(opt.output_dir, opt.mode + ".json"))
 
     ############################# create json file #############################
     if opt.debug:
         visualization(coco, opt)
+
+
+def main():
+    opt = Option().parse()
+    if not os.path.isdir(opt.output_dir):
+        os.makedirs(opt.output_dir)
+
+    if opt.type == "word_vector":
+        seen_word_vectors = get_category_word_vectors(SEEN_CLASSES)
+        unseen_word_vectors = get_category_word_vectors(UNSEEN_CLASSES)
+
+        with open(os.path.join(opt.data_dir, "Final_Tag_List.txt"), "r") as f:
+            tags = [
+                tag
+                for tag in f.read().splitlines()
+                if tag not in (SEEN_CLASSES + UNSEEN_CLASSES)
+            ]
+
+        tags_word_vectors = get_category_word_vectors(tags, discard_if_not_exist=True)
+
+        word_vectors = np.concatenate(
+            [seen_word_vectors, unseen_word_vectors], axis=0
+        )
+        file_path = os.path.join(opt.output_dir, "class_w2v_with_bg.npy")
+        np.save(file_path, word_vectors)
+        print("shape of class word vectors:", word_vectors.shape)
+        print("save word vectors to", file_path)
+
+        file_path = os.path.join(opt.output_dir, "vocabulary_w2v.npy")
+        np.save(file_path, tags_word_vectors)
+        print("shape of tag word vectors:", tags_word_vectors.shape)
+        print("save word vectors to", file_path)
+    elif opt.type == "annotation":
+        generate_annotation_file(opt)
+    else:
+        raise ValueError(
+            "The type should be one of options [word_vector, annotation]"
+        )
 
 
 if __name__ == "__main__":

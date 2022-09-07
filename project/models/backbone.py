@@ -36,7 +36,6 @@ class Extractor(nn.Module):
 
     def forward(self, x: Tensor) -> list:
         output = self.backbone(x)
-        print([(k, v.shape) for k, v in output.items()])
         output = list(output.values())
         return output
 

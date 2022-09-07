@@ -43,6 +43,9 @@ DEFAULT_TEST_TRANSFORMS = A.Compose(
 
 
 class KeycapDataset(Dataset):
+    SEEN_CLASSES = ("black_scratch", "white_scratch", "dent")
+    UNSEEN_CLASSES = ("smudge", "hair")
+
     def __init__(
         self,
         img_dir: str,
@@ -86,7 +89,7 @@ class KeycapDataset(Dataset):
         img_metadata = ImageMetadata(name=img_name, size=tuple(img.shape[:-1]))
         return img, img_metadata
 
-    def _convert_mask_into_binary(
+    def _convert_masks_into_binary_masks(
         self, ann_info: list[dict]
     ) -> list[np.ndarray]:
         masks = []
@@ -110,7 +113,7 @@ class KeycapDataset(Dataset):
             gt_bboxes.append(bbox)
             gt_labels.append(self._cat2label[ann["category_id"]])
 
-        gt_masks = self._convert_mask_into_binary(ann_info)
+        gt_masks = self._convert_masks_into_binary_masks(ann_info)
 
         return gt_bboxes, gt_labels, gt_masks
 
