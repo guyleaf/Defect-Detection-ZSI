@@ -158,9 +158,14 @@ class SemanticMaskHead(nn.Module):
                     self.d_kernel_semantic = nn.Conv2d(300, 300, kernel_size=3, padding=1)
 
 
-    def forward(self, x, bg_vector=None):
+    def forward(self, x, y, bg_vector=None):
+        '''
+        input x : visual feature (batch, 2048, 14, 14)
+        input y : target mask (batch, 28, 28)
+        input bg_vector : (300)
+        '''
         # replace bg by ba-rpn
-        if bg_vector and self.sync_bg:
+        if self.sync_bg:
             with torch.no_grad():
                 self.conv_vec.weight.data[0] = bg_vector[0]
                 if not self.seen_class:
@@ -187,9 +192,6 @@ class SemanticMaskHead(nn.Module):
                 d_x = self.d_kernel_semantic(x)
             d_x = self.dconvT(d_x)
 
-        # compute reconstructed error 
-        reconstructed_error = self.loss_ed(d_x, conv4_x)
-
         # classification module
         mask_pred_seen = self.conv_vec(x)
         if not self.seen_class and not self.gzsd:
@@ -200,12 +202,32 @@ class SemanticMaskHead(nn.Module):
             mask_pred = self.con_vec_t(mask_pred_seen)
             mask_pred_unseen = self.conv_vec_unseen(mask_pred)
             return mask_pred_seen, mask_pred_unseen
-        if not self.with_decoder:
-            return mask_pred_seen
-        else:
-            return mask_pred_seen, conv4_x, d_x
         
-        # TODO compute BCE loss
+        # compute loss
+        reconstructed_error = self.compute_reconstructed_error(conv4_x, d_x)
+        cls_loss = self.compute_binary_cls_error(mask_pred_seen, y)
+        loss = {
+            "reconstructed_error" : reconstructed_error,
+            "BCE_loss" :  cls_loss
+        }
+        return mask_pred_seen, loss
+        # if not self.with_decoder:
+        #     return mask_pred_seen
+        # else:
+        #     return mask_pred_seen, conv4_x, d_x
+        
+    def compute_reconstructed_error(self, x, d_x):
+        self.reconstructed_error = self.loss_ed(x, d_x)
+        return self.reconstructed_error
+    
+    def compute_binary_cls_error(self, x, y):
+        '''
+        input x : pred mask (batch, 28, 28)
+        input y : target mask (batch, 28, 28)
+        '''
+        self.cls_loss = self.loss_mask(x, y)
+        return self.cls_loss
+
     
     def init_weights(self):
         for m in [self.upsample]:
@@ -232,6 +254,8 @@ class SemanticMaskHead(nn.Module):
 if __name__ == '__main__':
     SMH = SemanticMaskHead().cuda()
     x = torch.randn(1, 2048, 14, 14).cuda()
-    y = SMH(x)
+    y = torch.randn(1, 4, 28, 28).cuda()
+    bg = torch.randn(300).cuda()
+    xx = SMH(x, y, bg)
     
     x=0
