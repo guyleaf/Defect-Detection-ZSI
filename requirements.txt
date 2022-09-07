@@ -1,9 +1,10 @@
 pytorch-lightning ~= 1.7.4
 torch ~= 1.12.1
 torchvision ~= 0.13.0
-opencv-python ~= 4.6.0.66
+opencv-python-headless ~= 4.6.0.66
 matplotlib ~= 3.5.3
 pycocotools ~= 2.0.4
+albumentations ~= 1.2.1
 typed-argument-parser
 
 black
