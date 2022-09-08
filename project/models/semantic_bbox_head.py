@@ -179,10 +179,10 @@ class SemanticBBoxHead(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        bbox_targets: tuple[
-            torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
-        ],
         bg_vector: torch.Tensor,
+        targets: Optional[
+            tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+        ] = None,
     ):
         if self.num_shared_fcs > 0:
             x = x.view(x.size(0), -1)
@@ -223,10 +223,12 @@ class SemanticBBoxHead(nn.Module):
             semantic_score = self.kernel_semantic(semantic_score)
 
             # decode
-            if self.with_decoder:
+            d_semantic_feature = None
+            if self.training and self.with_decoder:
                 d_semantic_score = self.d_kernel_semantic(semantic_score)
                 d_semantic_feature = torch.mm(d_semantic_score, self.voc.t())
                 d_semantic_feature = self.d_fc_semantic(d_semantic_feature)
+
             semantic_score = torch.mm(semantic_score, self.vec)
         else:
             semantic_score = self.kernel_semantic(self.vec)
@@ -238,18 +240,24 @@ class SemanticBBoxHead(nn.Module):
 
         losses = {}
         if self.training:
-            labels, label_weights, bbox_targets, bbox_weights = bbox_targets
+            if targets is None:
+                raise ValueError("targets should not be None")
+
+            labels, label_weights, bbox_targets, bbox_weights = targets
             losses = {
-                "reconstructed_error": self.compute_reconstructed_error(
-                    x_semantic, d_semantic_feature
-                ),
-                "semantic_loss": self.compute_semantic_loss(
+                "zsd_semantic_loss": self.compute_semantic_loss(
                     semantic_score, labels, label_weights
                 ),
-                "bbox_loss": self.compute_bbox_loss(
+                "zsd_bbox_loss": self.compute_bbox_loss(
                     bbox_pred, labels, bbox_targets, bbox_weights
                 ),
             }
+
+            if self.with_decoder:
+                reconstructed_error = self.compute_reconstructed_error(
+                    x_semantic, d_semantic_feature
+                )
+                losses["zsd_reconstructed_error"] = reconstructed_error
         return semantic_score, bbox_pred, losses
 
     def get_target(
